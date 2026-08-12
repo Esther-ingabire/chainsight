@@ -9,6 +9,31 @@ Final Year Project, Adventist University of Central Africa (AUCA), Faculty of In
 Technology, Department of Software Engineering. Case study: Ministry of Agriculture and
 Animal Resources (MINAGRI).
 
+## Features
+
+- **8 role-based dashboards** — Cooperative Manager, Transporter, Distributor, Market Agent,
+  MINAGRI Officer, Admin, Warehouse, and a public tracking view — each with its own
+  permissions and data scope.
+- **Batch traceability** — every batch gets a QR code that follows it from cooperative
+  dispatch through transport, distribution, and market sale, with a full public timeline.
+- **Live fleet monitoring** — real-time GPS tracking (Mapbox) and cold-chain temperature/
+  humidity telemetry for trips in transit, backed by ESP32/ESP8266 + DHT22 IoT sensors.
+- **Loss risk scoring** — a rule-based engine flags batches at risk of spoilage using route,
+  weather, delay, and cold-chain signals, surfaced to cooperatives and MINAGRI alike.
+- **AI Insights Engine** — generates a national "Daily Intelligence Brief" every night
+  (loss summaries, route/cold-chain alerts, cooperative performance, seasonal outlook,
+  actionable recommendations) for the MINAGRI dashboard.
+- **Supply-chain-wide bottleneck detection** — analytics that pinpoint where losses and
+  delays concentrate across the whole chain, not just a single stage.
+- **Reporting & exports** — combined activity reports and CSV exports (including market
+  agent loss summaries) for every role.
+- **Notifications & 2FA** — in-app notifications consolidated into a single bell, plus
+  real two-factor authentication and per-role settings.
+- **Transport requests & driver management** — cooperatives request transport, distributors
+  manage their fleet and drivers, and transporters carry ratings from past trips.
+- **Mobile app** (React Native + Expo) — Transporter and Market Agent roles get a native
+  app with offline support for use in the field.
+
 ## Repo layout
 
 ```

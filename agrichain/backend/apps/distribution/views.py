@@ -175,19 +175,42 @@ class ProduceRequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], permission_classes=[IsCooperativeManager])
     def accept(self, request, pk=None):
+        from decimal import Decimal
+        from django.db import transaction
+        from apps.cooperatives.models import CooperativeStock
+
         req = self.get_object()
         if req.status != ProduceRequest.Status.PENDING:
             return Response({'detail': 'Request is not pending.'}, status=status.HTTP_400_BAD_REQUEST)
-        req.status = ProduceRequest.Status.ACCEPTED
-        req.cooperative_response_notes = request.data.get('notes', '')
-        req.responded_at = timezone.now()
-        req.save()
-        SupplyAgreement.objects.create(
-            produce_request=req,
-            agreed_quantity_kg=req.quantity_kg,
-            agreed_quality_grade=req.quality_grade_required,
-            agreed_delivery_date=req.required_delivery_date,
-        )
+
+        with transaction.atomic():
+            # Committing to this request consumes stock the cooperative had listed as
+            # available — pull it off the oldest-harvest rows first (FIFO), same principle
+            # as the distributor-side batch allocation in _allocate_batches_fifo.
+            remaining = Decimal(str(req.quantity_kg))
+            stock_rows = CooperativeStock.objects.select_for_update().filter(
+                cooperative=req.cooperative, crop=req.crop, is_available=True, quantity_kg__gt=0,
+            ).order_by('harvest_date')
+            for stock in stock_rows:
+                if remaining <= 0:
+                    break
+                take = min(stock.quantity_kg, remaining)
+                stock.quantity_kg -= take
+                if stock.quantity_kg <= 0:
+                    stock.is_available = False
+                stock.save(update_fields=['quantity_kg', 'is_available', 'updated_at'])
+                remaining -= take
+
+            req.status = ProduceRequest.Status.ACCEPTED
+            req.cooperative_response_notes = request.data.get('notes', '')
+            req.responded_at = timezone.now()
+            req.save()
+            SupplyAgreement.objects.create(
+                produce_request=req,
+                agreed_quantity_kg=req.quantity_kg,
+                agreed_quality_grade=req.quality_grade_required,
+                agreed_delivery_date=req.required_delivery_date,
+            )
         notify(
             req.distributor.user,
             Notification.NotificationType.COOP_RESPONSE,

@@ -695,7 +695,8 @@ export default function Transporters() {
             <div>
               <label className="label">Required pickup date/time *</label>
               <input type="datetime-local" className="input" required value={requestForm.required_pickup_datetime}
-                onChange={e => setRequestForm(f => ({ ...f, required_pickup_datetime: e.target.value }))} />
+                onChange={e => setRequestForm(f => ({ ...f, required_pickup_datetime: e.target.value }))}
+                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} />
             </div>
           </div>
           <div className="flex items-center gap-3">

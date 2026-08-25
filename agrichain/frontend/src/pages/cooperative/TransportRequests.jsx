@@ -597,7 +597,7 @@ export default function TransportRequests() {
             </div>
             <div>
               <label className="label">Required pickup date</label>
-              <input type="datetime-local" className="input" value={form.required_pickup_datetime} onChange={e => setForm(f => ({ ...f, required_pickup_datetime: e.target.value }))} required />
+              <input type="datetime-local" className="input" value={form.required_pickup_datetime} onChange={e => setForm(f => ({ ...f, required_pickup_datetime: e.target.value }))} required min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 from .models import Transporter, Vehicle, TransportRequest, Trip, GPSTrack, IncidentReport, TransporterRating
 
 
@@ -166,3 +167,8 @@ class TransportRequestSerializer(serializers.ModelSerializer):
         if obj.requested_by_distributor:
             return str(obj.requested_by_distributor)
         return '—'
+
+    def validate_required_pickup_datetime(self, value):
+        if value < timezone.now():
+            raise serializers.ValidationError('Required pickup date/time cannot be in the past.')
+        return value

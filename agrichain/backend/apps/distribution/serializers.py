@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 from .models import Distributor, ProduceRequest, SupplyAgreement, CollectionNotice, Order, DistributorWasteReport
 
 
@@ -94,6 +95,11 @@ class ProduceRequestSerializer(serializers.ModelSerializer):
 
     def get_supply_agreement_id(self, obj):
         return getattr(obj.supply_agreement, 'id', None) if hasattr(obj, 'supply_agreement') else None
+
+    def validate_required_delivery_date(self, value):
+        if value < timezone.localdate():
+            raise serializers.ValidationError('Required delivery date cannot be in the past.')
+        return value
 
     def to_internal_value(self, data):
         # Mutable copy

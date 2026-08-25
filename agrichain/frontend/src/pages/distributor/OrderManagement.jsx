@@ -677,7 +677,7 @@ export default function OrderManagement() {
               </div>
               <div>
                 <label className="label">Delivery deadline *</label>
-                <input type="date" className="input" value={form.required_delivery_date} onChange={e => setForm(f => ({ ...f, required_delivery_date: e.target.value }))} required />
+                <input type="date" className="input" value={form.required_delivery_date} onChange={e => setForm(f => ({ ...f, required_delivery_date: e.target.value }))} required min={new Date().toISOString().slice(0, 10)} />
               </div>
             </div>
             <div>

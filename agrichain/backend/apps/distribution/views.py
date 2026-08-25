@@ -320,17 +320,34 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], permission_classes=[IsDistributor])
     def confirm(self, request, pk=None):
+        from decimal import Decimal
+        from django.db import transaction
+
         order = self.get_object()
-        qty = request.data.get('confirmed_quantity_kg', order.quantity_requested_kg)
-        order.confirmed_quantity_kg = qty
-        order.delivery_method = request.data.get('delivery_method')
-        order.status = Order.Status.CONFIRMED
-        order.confirmed_at = timezone.now()
-        order.save()
-        # Only allocate once — a re-confirmation (e.g. quantity correction) shouldn't
-        # double-link batches on top of an allocation that's already there.
-        if not order.batch_allocations.exists():
-            _allocate_batches_fifo(order, qty)
+        qty = Decimal(str(request.data.get('confirmed_quantity_kg', order.quantity_requested_kg)))
+
+        with transaction.atomic():
+            # Confirming an order consumes stock from the collection notice it was placed
+            # against — mirrors ProduceRequestViewSet.accept doing the same for
+            # CooperativeStock one stage upstream. Use the delta against whatever was
+            # previously confirmed (not the raw qty) so a re-confirmation that corrects the
+            # quantity doesn't double-deduct the notice.
+            notice = CollectionNotice.objects.select_for_update().get(pk=order.collection_notice_id)
+            previously_confirmed = order.confirmed_quantity_kg or Decimal('0')
+            notice.available_quantity_kg = max(
+                Decimal('0'), notice.available_quantity_kg - (qty - previously_confirmed)
+            )
+            notice.save(update_fields=['available_quantity_kg', 'updated_at'])
+
+            order.confirmed_quantity_kg = qty
+            order.delivery_method = request.data.get('delivery_method')
+            order.status = Order.Status.CONFIRMED
+            order.confirmed_at = timezone.now()
+            order.save()
+            # Only allocate once — a re-confirmation (e.g. quantity correction) shouldn't
+            # double-link batches on top of an allocation that's already there.
+            if not order.batch_allocations.exists():
+                _allocate_batches_fifo(order, qty)
         notify(
             order.market_agent.user,
             Notification.NotificationType.ORDER_CONFIRMED,

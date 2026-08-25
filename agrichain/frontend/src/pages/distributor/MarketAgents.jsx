@@ -750,7 +750,7 @@ export default function MarketAgents() {
           </div>
           <div>
             <label className="label">Collect by (optional)</label>
-            <input type="date" className="input" value={noticeForm.available_until} onChange={e => setNoticeForm(f => ({ ...f, available_until: e.target.value }))} />
+            <input type="date" className="input" value={noticeForm.available_until} onChange={e => setNoticeForm(f => ({ ...f, available_until: e.target.value }))} min={new Date().toISOString().slice(0, 10)} />
             <p className="text-xs text-gray-400 mt-1">Leave blank to keep this listing open until you close it manually. If set, agents can't collect against it after this date.</p>
           </div>
           <div className="flex gap-3 pt-2">

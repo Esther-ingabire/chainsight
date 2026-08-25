@@ -142,6 +142,11 @@ class CollectionNoticeSerializer(serializers.ModelSerializer):
     def get_orders_count(self, obj):
         return obj.orders.count()
 
+    def validate_collection_deadline(self, value):
+        if value is not None and value < timezone.now():
+            raise serializers.ValidationError('Collection deadline cannot be in the past.')
+        return value
+
     def to_internal_value(self, data):
         data = dict(data.lists() if hasattr(data, 'lists') else data.items())
         data = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in data.items()}

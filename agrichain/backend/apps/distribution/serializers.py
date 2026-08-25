@@ -210,6 +210,11 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_distributor_name(self, obj):
         return str(obj.distributor)
 
+    def validate_preferred_collection_date(self, value):
+        if value is not None and value < timezone.localdate():
+            raise serializers.ValidationError('Preferred collection date cannot be in the past.')
+        return value
+
 
 class DistributorWasteReportSerializer(serializers.ModelSerializer):
     crop_name = serializers.CharField(source='crop.name', read_only=True, default=None)

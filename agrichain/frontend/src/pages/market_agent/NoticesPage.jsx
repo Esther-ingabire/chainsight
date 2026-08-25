@@ -255,6 +255,7 @@ export default function NoticesPage() {
                 className="input"
                 value={orderForm.preferred_collection_date}
                 onChange={e => setOrderForm(f => ({ ...f, preferred_collection_date: e.target.value }))}
+                min={new Date().toISOString().slice(0, 10)}
               />
             </div>
 

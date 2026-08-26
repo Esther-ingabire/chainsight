@@ -162,39 +162,43 @@ export default function IncomingDeliveries() {
     e.preventDefault()
     if (!bulkGroup) return
     setBulkSaving(true)
-    try {
-      await Promise.all(bulkGroup.map(d => {
-        const form = bulkForms[d.id]
-        const { lossKg, lossPct } = bulkLoss(d)
-        let loss_reason = ''
-        if (lossKg > 0) {
-          if (form.shortfall_type === 'TRANSIT_LOSS') {
-            loss_reason = `IN_TRANSIT: ${form.transit_loss_reason}`
-          } else if (form.shortfall_type === 'NOT_DISPATCHED') {
-            loss_reason = `NOT_DISPATCHED: ${form.not_dispatched_reason} — ${lossKg}kg of ${d.crop_name} not sent by cooperative`
-          }
+    const targets = bulkGroup
+    const results = await Promise.allSettled(targets.map(d => {
+      const form = bulkForms[d.id]
+      const { lossKg, lossPct } = bulkLoss(d)
+      let loss_reason = ''
+      if (lossKg > 0) {
+        if (form.shortfall_type === 'TRANSIT_LOSS') {
+          loss_reason = `IN_TRANSIT: ${form.transit_loss_reason}`
+        } else if (form.shortfall_type === 'NOT_DISPATCHED') {
+          loss_reason = `NOT_DISPATCHED: ${form.not_dispatched_reason} — ${lossKg}kg of ${d.crop_name} not sent by cooperative`
         }
-        return distributionApi.confirmReceipt(d.batch_id, {
-          received_qty_kg: Number(form.received_qty_kg) || 0,
-          quality_grade_received: form.quality_grade_received,
-          loss_kg: lossKg,
-          loss_pct: parseFloat(lossPct),
-          loss_reason,
-          shortfall_type: form.shortfall_type || null,
-          notes: bulkNotes,
-        })
-      }))
-      const ids = new Set(bulkGroup.map(d => d.id))
+      }
+      return distributionApi.confirmReceipt(d.batch_id, {
+        received_qty_kg: Number(form.received_qty_kg) || 0,
+        quality_grade_received: form.quality_grade_received,
+        loss_kg: lossKg,
+        loss_pct: parseFloat(lossPct),
+        loss_reason,
+        shortfall_type: form.shortfall_type || null,
+        notes: bulkNotes,
+      })
+    }))
+    const succeeded = targets.filter((_, i) => results[i].status === 'fulfilled')
+    const failedCount = targets.length - succeeded.length
+    if (succeeded.length > 0) {
+      const ids = new Set(succeeded.map(d => d.id))
       setDeliveries(prev => prev.map(d => ids.has(d.id) ? { ...d, status: 'CONFIRMED' } : d))
-      toast.success(`Confirmed ${bulkGroup.length} batches from this delivery`)
-    } catch {
-      const ids = new Set(bulkGroup.map(d => d.id))
-      setDeliveries(prev => prev.map(d => ids.has(d.id) ? { ...d, status: 'CONFIRMED' } : d))
-      toast.success(`Confirmed ${bulkGroup.length} batches from this delivery`)
-    } finally {
-      setBulkSaving(false)
-      setBulkGroup(null)
     }
+    if (failedCount === 0) {
+      toast.success(`Confirmed ${targets.length} batches from this delivery`)
+    } else if (succeeded.length === 0) {
+      toast.error(`Failed to confirm ${failedCount} batch${failedCount > 1 ? 'es' : ''}`)
+    } else {
+      toast.error(`Confirmed ${succeeded.length} batches, ${failedCount} failed`)
+    }
+    setBulkSaving(false)
+    setBulkGroup(null)
   }
 
   return (

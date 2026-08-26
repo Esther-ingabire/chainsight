@@ -88,7 +88,12 @@ class ProduceRequestSerializer(serializers.ModelSerializer):
                   'delivery_method_display', 'status',
                   'cooperative_response_notes', 'responded_at', 'created_at', 'updated_at',
                   'supply_agreement_id']
-        read_only_fields = ['id', 'distributor', 'responded_at', 'created_at', 'updated_at']
+        # status and cooperative_response_notes only ever change through the accept/decline
+        # actions (direct model writes) — a plain PATCH shouldn't be able to flip a request
+        # straight to ACCEPTED and skip the stock deduction + SupplyAgreement creation that
+        # action performs.
+        read_only_fields = ['id', 'distributor', 'status', 'cooperative_response_notes',
+                             'responded_at', 'created_at', 'updated_at']
 
     def get_distributor_name(self, obj):
         return str(obj.distributor)

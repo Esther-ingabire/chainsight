@@ -105,7 +105,14 @@ class TripSerializer(serializers.ModelSerializer):
                   'recipient_name', 'condition_on_arrival', 'condition_on_arrival_display',
                   'delivery_gps_lat', 'delivery_gps_lng', 'delivery_photo',
                   'gps_tracks', 'transit_duration_hours']
-        read_only_fields = ['id', 'created_at']
+        # Every field here besides transport_request is only ever set by confirm-pickup/
+        # confirm-delivery (direct model writes) — a plain PATCH shouldn't be able to mark
+        # a trip picked-up/delivered without going through those actions' required-field
+        # checks (e.g. recipient_name) or their sync of TransportRequest.status.
+        read_only_fields = ['id', 'actual_pickup_datetime', 'actual_delivery_datetime',
+                             'pickup_confirmed_at', 'delivery_confirmed_at', 'delivery_notes',
+                             'recipient_name', 'condition_on_arrival', 'delivery_gps_lat',
+                             'delivery_gps_lng', 'delivery_photo', 'created_at']
 
 
 class TripListSerializer(serializers.ModelSerializer):

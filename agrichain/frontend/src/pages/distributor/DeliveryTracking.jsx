@@ -113,11 +113,10 @@ export default function DeliveryTracking() {
       toast.success('Receipt confirmed — traceability record updated')
       setConfirmTarget(null)
       setReceiptForm(RECEIPT_BLANK)
-    } catch {
-      setDeliveries(prev => prev.map(d => d.id === confirmTarget.id ? { ...d, status: 'CONFIRMED', progress: 100 } : d))
-      toast.success('Receipt confirmed')
-      setConfirmTarget(null)
-      setReceiptForm(RECEIPT_BLANK)
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : 'Could not confirm receipt'
+      toast.error(msg)
     } finally { setSubmitting(false) }
   }
 

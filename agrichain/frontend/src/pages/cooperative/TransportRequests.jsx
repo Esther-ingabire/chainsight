@@ -112,6 +112,8 @@ export default function TransportRequests() {
   const submitRequest = async (e) => {
     e.preventDefault()
     if (!form.transporter) { toast.error('Select a transporter'); return }
+    if (!form.pickup_location) { toast.error('Search and select a pickup location from the dropdown'); return }
+    if (!form.destination) { toast.error('Search and select a destination from the dropdown'); return }
     setSaving(true)
     try {
       if (extraStops.length > 0) {

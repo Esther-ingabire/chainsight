@@ -110,7 +110,12 @@ class CollectionConfirmationViewSet(viewsets.ModelViewSet):
         return CollectionConfirmation.objects.none()
 
     def perform_create(self, serializer):
+        from apps.distribution.models import Order
         confirmation = serializer.save(market_agent=self.request.user.market_agent_profile)
+        order = confirmation.order
+        if order.status == Order.Status.CONFIRMED:
+            order.status = Order.Status.COLLECTED
+            order.save(update_fields=['status', 'updated_at'])
         notify(
             confirmation.order.distributor.user,
             Notification.NotificationType.AGENT_COLLECTION_CONFIRMED,
@@ -136,8 +141,12 @@ class WasteReportViewSet(viewsets.ModelViewSet):
         return WasteReport.objects.none()
 
     def perform_create(self, serializer):
+        from apps.distribution.models import Order
         from apps.notifications.services import notify_high_spoilage
         report = serializer.save(market_agent=self.request.user.market_agent_profile)
+        if report.order_id and report.order.status in (Order.Status.CONFIRMED, Order.Status.COLLECTED):
+            report.order.status = Order.Status.WASTE_REPORTED
+            report.order.save(update_fields=['status', 'updated_at'])
         notify_high_spoilage(
             'Market Agent', str(report.market_agent), report.market_spoilage_loss_pct,
             related_object_type='market_agent_waste_report', related_object_id=report.id,
@@ -174,8 +183,14 @@ class WasteReportViewSet(viewsets.ModelViewSet):
                 return Response({'row': i, 'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
             row_serializers.append(serializer)
 
+        from apps.distribution.models import Order
+
         with transaction.atomic():
             created = [s.save(market_agent=agent) for s in row_serializers]
+            for report in created:
+                if report.order_id and report.order.status in (Order.Status.CONFIRMED, Order.Status.COLLECTED):
+                    report.order.status = Order.Status.WASTE_REPORTED
+                    report.order.save(update_fields=['status', 'updated_at'])
 
         from apps.notifications.services import notify_high_spoilage
         for report in created:

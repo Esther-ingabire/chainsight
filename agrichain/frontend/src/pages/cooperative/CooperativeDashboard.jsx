@@ -155,9 +155,10 @@ export default function CooperativeDashboard() {
       }
       setPendingRequests(prev => prev.filter(r => r.id !== requestId))
       toast.success(`Request ${action === 'accept' ? 'accepted' : 'declined'}`)
-    } catch {
-      setPendingRequests(prev => prev.filter(r => r.id !== requestId))
-      toast.success(`Request ${action === 'accept' ? 'accepted' : 'declined'}`)
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : `Failed to ${action} request`
+      toast.error(msg)
     }
   }
 

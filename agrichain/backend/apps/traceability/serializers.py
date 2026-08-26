@@ -85,7 +85,12 @@ class BatchSerializer(serializers.ModelSerializer):
                             'self_transport_loss_kg', 'self_transport_loss_pct',
                             'market_spoilage_loss_kg', 'market_spoilage_loss_pct',
                             'total_loss_kg', 'total_loss_pct',
-                            'mismatch_reported', 'mismatch_reported_at', 'mismatch_description', 'mismatch_notes']
+                            'mismatch_reported', 'mismatch_reported_at', 'mismatch_description', 'mismatch_notes',
+                            # Only ever set by confirm-receipt (direct model writes) — a plain
+                            # PATCH shouldn't be able to fabricate a distributor receipt and
+                            # zero out recorded transit loss without going through it.
+                            'current_status', 'received_by_distributor', 'weight_at_distributor_kg',
+                            'quality_at_distributor', 'distributor_receipt_timestamp']
 
     def get_batch_id_short(self, obj):
         return str(obj.batch_id)[:8].upper()

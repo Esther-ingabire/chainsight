@@ -251,6 +251,7 @@ export default function MarketAgents() {
   // ── Stock listing handlers ──
   const submitNotice = async (e) => {
     e.preventDefault()
+    if (!noticeForm.pickup_location) { toast.error('Search and select a pickup location from the dropdown'); return }
     setNoticeSaving(true)
     try {
       const res = await distributionApi.createNotice({

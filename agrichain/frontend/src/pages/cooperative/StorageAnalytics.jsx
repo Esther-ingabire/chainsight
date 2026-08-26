@@ -3,18 +3,6 @@ import { Thermometer, Droplets, AlertTriangle, CheckCircle, RefreshCw, Database,
 import KPICard from '../../components/ui/KPICard.jsx'
 import { cooperativesApi } from '../../api/cooperatives.js'
 
-const MOCK_FACILITIES = [
-  { id: 1, name: 'Cold Store A', capacity_kg: 5000, location_description: 'Block A', has_iot_sensor: true,  temp_threshold_amber_celsius: 15 },
-  { id: 2, name: 'Cold Store B', capacity_kg: 3000, location_description: 'Block B', has_iot_sensor: true,  temp_threshold_amber_celsius: 15 },
-  { id: 3, name: 'Dry Store',    capacity_kg: 8000, location_description: 'Block C', has_iot_sensor: false, temp_threshold_amber_celsius: 28 },
-]
-
-const MOCK_READINGS = [
-  { id: 1, facility: 1, facility_name: 'Cold Store A', temperature_celsius: 12.4, humidity_percent: 68, is_temperature_breach: false, is_humidity_breach: false, timestamp: new Date().toISOString() },
-  { id: 2, facility: 2, facility_name: 'Cold Store B', temperature_celsius: 17.8, humidity_percent: 74, is_temperature_breach: true,  is_humidity_breach: false, timestamp: new Date().toISOString() },
-  { id: 3, facility: 3, facility_name: 'Dry Store',    temperature_celsius: 24.1, humidity_percent: 55, is_temperature_breach: false, is_humidity_breach: false, timestamp: new Date().toISOString() },
-]
-
 function FacilityCard({ facility, reading }) {
   const temp = reading?.temperature_celsius ?? null
   const humidity = reading?.humidity_percent ?? null
@@ -76,8 +64,8 @@ function FacilityCard({ facility, reading }) {
 }
 
 export default function StorageAnalytics() {
-  const [facilities, setFacilities] = useState(MOCK_FACILITIES)
-  const [readings, setReadings] = useState(MOCK_READINGS)
+  const [facilities, setFacilities] = useState([])
+  const [readings, setReadings] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -88,12 +76,11 @@ export default function StorageAnalytics() {
         cooperativesApi.getMyFacilities(),
         cooperativesApi.getStorageReadings(),
       ])
-      const facs = facRes.data?.results ?? facRes.data ?? []
-      const iots = iotRes.data?.results ?? iotRes.data ?? []
-      if (facs.length) setFacilities(facs)
-      if (iots.length) setReadings(iots)
+      setFacilities(facRes.data?.results ?? facRes.data ?? [])
+      setReadings(iotRes.data?.results ?? iotRes.data ?? [])
     } catch {
-      // keep mock data
+      // Leave whatever was last successfully loaded in place rather than clearing it —
+      // a single failed poll shouldn't blank out real data that's still on screen.
     } finally {
       setLoading(false)
       setRefreshing(false)

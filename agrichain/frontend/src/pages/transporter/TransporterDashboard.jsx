@@ -189,10 +189,12 @@ function DriverDashboard() {
         await transportApi.declineRequest(req.id, { reason: 'Not available' })
         toast.success('Request declined')
       }
-    } catch {
-      toast.success(`Request ${action === 'accept' ? 'accepted' : 'declined'}`)
-    } finally {
       setPending(prev => prev.filter(r => r.id !== req.id))
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : `Failed to ${action} request`
+      toast.error(msg)
+    } finally {
       setActing(null)
     }
   }
@@ -275,10 +277,12 @@ function CompanyDashboard() {
         await transportApi.declineRequest(req.id, { reason: 'Not available' })
         toast.success('Request declined')
       }
-    } catch {
-      toast.success(`Request ${action === 'accept' ? 'accepted' : 'declined'}`)
-    } finally {
       setPending(prev => prev.filter(r => r.id !== req.id))
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : `Failed to ${action} request`
+      toast.error(msg)
+    } finally {
       setActing(null)
     }
   }

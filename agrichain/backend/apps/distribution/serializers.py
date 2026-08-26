@@ -188,6 +188,14 @@ class OrderSerializer(serializers.ModelSerializer):
                   'confirmed_quantity_kg', 'adjustment_reason',
                   'delivery_method', 'transporter', 'status', 'source_batches',
                   'created_at', 'confirmed_at', 'updated_at']
+        # market_agent/distributor are set from the requester's profile in perform_create;
+        # everything else here only ever changes via the confirm/decline actions (direct
+        # model writes, not this serializer) — none of it should be settable through a
+        # plain create/update call, which would otherwise let a client fake a confirmed
+        # order without going through stock deduction or FIFO batch allocation.
+        read_only_fields = ['id', 'market_agent', 'distributor', 'confirmed_quantity_kg',
+                             'adjustment_reason', 'delivery_method', 'transporter', 'status',
+                             'created_at', 'confirmed_at', 'updated_at']
 
     def get_source_batches(self, obj):
         # Which cooperative batch(es) this order was actually filled from — see
@@ -202,7 +210,6 @@ class OrderSerializer(serializers.ModelSerializer):
             }
             for a in obj.batch_allocations.select_related('batch__cooperative').order_by('created_at')
         ]
-        read_only_fields = ['id', 'market_agent', 'distributor', 'confirmed_at', 'created_at', 'updated_at']
 
     def get_market_agent_name(self, obj):
         return str(obj.market_agent)

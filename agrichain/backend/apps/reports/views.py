@@ -154,6 +154,23 @@ class ExportReportView(APIView):
 
     @staticmethod
     def _pdf_response(title, headers, rows, base_filename, request, extra_sections=None, chart_spec=None):
+        generated_by = request.user.get_full_name() or request.user.phone_number
+        role_label   = request.user.role.replace('_', ' ').title()
+        pdf_bytes = ExportReportView._build_pdf_bytes(
+            title, headers, rows, generated_by, role_label,
+            extra_sections=extra_sections, chart_spec=chart_spec,
+        )
+        resp = HttpResponse(pdf_bytes, content_type='application/pdf')
+        resp['Content-Disposition'] = f'attachment; filename="{base_filename}.pdf"'
+        return resp
+
+    @staticmethod
+    def _build_pdf_bytes(title, headers, rows, generated_by, role_label, extra_sections=None, chart_spec=None):
+        """
+        Core PDF byte-builder shared by the live _pdf_response (HTTP download, generated_by
+        taken from request.user) and apps.reports.tasks (scheduled Celery jobs, generated_by
+        passed as 'Scheduled Job' — no request exists in that context).
+        """
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib.units import cm
@@ -208,8 +225,6 @@ class ExportReportView(APIView):
                                   textColor=TEXT_MID, alignment=TA_CENTER))
 
         generated_at = timezone.now().strftime('%d %B %Y at %H:%M')
-        generated_by = request.user.get_full_name() or request.user.phone_number
-        role_label   = request.user.role.replace('_', ' ').title()
 
         # ── Helper: build a styled, wrapping data table ───────────────────────
         def _make_table(hdrs, data_rows, extra_width=0):
@@ -404,9 +419,7 @@ class ExportReportView(APIView):
 
         doc.build(elements)
         buf.seek(0)
-        resp = HttpResponse(buf.getvalue(), content_type='application/pdf')
-        resp['Content-Disposition'] = f'attachment; filename="{base_filename}.pdf"'
-        return resp
+        return buf.getvalue()
 
     @staticmethod
     def _parse_date_range(request):

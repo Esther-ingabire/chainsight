@@ -104,6 +104,12 @@ class AccessRequestAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model  = AccessRequest
         fields = "__all__"
+        # status/reviewed_by/reviewed_at/created_user/admin_notes only ever change through
+        # approve_and_create_user/reject_access_request (direct model writes) — a plain PATCH
+        # shouldn't be able to mark a request APPROVED/REJECTED without actually creating the
+        # user account, sending the activation OTP, or writing the audit log those do.
+        read_only_fields = ["id", "status", "admin_notes", "reviewed_by", "reviewed_at",
+                             "created_user", "created_at"]
     def get_documents(self, obj):
         request = self.context.get('request')
         docs = []

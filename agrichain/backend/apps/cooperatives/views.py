@@ -500,6 +500,7 @@ class WarehouseDirectoryView(APIView):
     def get(self, request):
         qs = ColdStorageFacility.objects.filter(
             is_active=True, is_available_for_rent=True, warehouse_manager__isnull=False,
+            cooperative__isnull=True,  # never list a facility that's currently rented out
         ).select_related('warehouse_manager').annotate(
             manager_avg_rating=Avg('warehouse_manager__ratings__rating'),
         ).order_by(F('manager_avg_rating').desc(nulls_last=True), '-created_at')

@@ -75,8 +75,8 @@ export default function MyFacilities() {
     try {
       const res = await warehouseApi.updateFacility(f.id, { is_available_for_rent: !f.is_available_for_rent })
       setFacilities(prev => prev.map(x => x.id === f.id ? res.data : x))
-    } catch {
-      toast.error('Could not update listing status')
+    } catch (err) {
+      toast.error(err.response?.data?.is_available_for_rent?.[0] || 'Could not update listing status')
     }
   }
 

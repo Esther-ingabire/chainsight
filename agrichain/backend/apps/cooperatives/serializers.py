@@ -87,6 +87,17 @@ class ColdStorageFacilitySerializer(serializers.ModelSerializer):
     def get_distance_km(self, obj):
         return getattr(obj, 'distance_km', None)
 
+    def validate_is_available_for_rent(self, value):
+        # WarehouseRentalRequestViewSet.accept/end flip this in lockstep with `cooperative`
+        # to keep a rented-out facility out of the directory — a facility with an active
+        # rental (cooperative still set) shouldn't be re-listable by a plain PATCH, or it
+        # reappears as bookable while it's still occupied.
+        if value and self.instance is not None and self.instance.cooperative_id:
+            raise serializers.ValidationError(
+                'This facility is currently rented out — it can only be re-listed after the rental ends.'
+            )
+        return value
+
     def _rating_agg(self, obj):
         if not obj.warehouse_manager_id:
             return None

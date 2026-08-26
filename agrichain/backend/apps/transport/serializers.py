@@ -149,7 +149,24 @@ class TransportRequestSerializer(serializers.ModelSerializer):
                   'status', 'decline_reason', 'accepted_at', 'notes',
                   'run_id', 'stop_sequence', 'has_rating',
                   'created_at', 'updated_at', 'trip']
-        read_only_fields = ['id', 'accepted_at', 'created_at', 'updated_at']
+        # status/decline_reason only ever change via the accept/assign-driver/decline
+        # actions (direct model writes) — never client-settable directly. vehicle is only
+        # ever assigned by assign-driver, never supplied at creation, so it's read-only too.
+        # transporter IS legitimately supplied by the requester at creation (see
+        # validate() below for why it can't just be blanket read-only).
+        read_only_fields = ['id', 'status', 'decline_reason', 'vehicle',
+                             'accepted_at', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        # Reassigning transporter after creation should only happen through the
+        # assign-driver action (which also creates the Trip and notifies the new driver) —
+        # block it on update while still allowing it on create, where the requester picks
+        # which transporter to send the request to.
+        if self.instance is not None and 'transporter' in attrs and attrs['transporter'] != self.instance.transporter:
+            raise serializers.ValidationError(
+                {'transporter': 'Transporter cannot be reassigned directly — use assign-driver.'}
+            )
+        return attrs
 
     def get_has_rating(self, obj):
         return hasattr(obj, 'rating')

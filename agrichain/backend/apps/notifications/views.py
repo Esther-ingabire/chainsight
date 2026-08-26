@@ -7,8 +7,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
-from .models import Notification
-from .serializers import NotificationSerializer
+from .models import Notification, Announcement
+from .serializers import NotificationSerializer, AnnouncementSerializer
+from apps.authentication.permissions import IsAdminRole
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -42,6 +43,38 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     def unread_count(self, request):
         count = Notification.objects.filter(recipient=request.user, is_read=False).count()
         return Response({'count': count})
+
+
+class AnnouncementViewSet(viewsets.ModelViewSet):
+    """
+    Admin CRUD for system-wide announcements. Posting a new one, or reactivating an
+    inactive one, fans out a SYSTEM_ANNOUNCEMENT Notification to every active user
+    (delivered live via the existing bell/SSE stream) — not on every edit, so
+    correcting a typo on an already-active announcement doesn't re-notify everyone.
+    """
+    serializer_class = AnnouncementSerializer
+    permission_classes = [IsAdminRole]
+    queryset = Announcement.objects.all()
+
+    def perform_create(self, serializer):
+        announcement = serializer.save(created_by=self.request.user)
+        self._fan_out(announcement)
+
+    def perform_update(self, serializer):
+        was_active = serializer.instance.is_active
+        announcement = serializer.save()
+        if announcement.is_active and not was_active:
+            self._fan_out(announcement)
+
+    def _fan_out(self, announcement):
+        from apps.authentication.models import User
+        from .services import notify
+        for user in User.objects.filter(is_active=True):
+            notify(
+                user, Notification.NotificationType.SYSTEM_ANNOUNCEMENT,
+                announcement.title, announcement.body,
+                related_object_type='announcement', related_object_id=announcement.id,
+            )
 
 
 def notification_stream(request):

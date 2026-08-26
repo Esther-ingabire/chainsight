@@ -65,3 +65,26 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"[{self.notification_type}] → {self.recipient.phone_number}: {self.title}"
+
+
+class Announcement(models.Model):
+    """
+    Admin-authored system-wide announcement. Posting one (or reactivating an inactive
+    one) fans out a SYSTEM_ANNOUNCEMENT Notification to every active user — reusing the
+    existing notification bell/SSE stream rather than a separate delivery mechanism.
+    See AnnouncementViewSet for the fan-out logic.
+    """
+
+    title      = models.CharField(max_length=200)
+    body       = models.TextField()
+    is_active  = models.BooleanField(default=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, related_name='announcements_created')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title

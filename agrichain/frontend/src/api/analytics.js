@@ -39,6 +39,12 @@ export const analyticsApi = {
   getNotifications: (params)      => apiClient.get('/notifications/', { params }),
   markRead:    (id)               => apiClient.post(`/notifications/${id}/read/`),
   markAllRead: ()                 => apiClient.post('/notifications/mark-all-read/', {}, { _silent: true }),
+
+  // System Announcements (Admin) — posting/reactivating one notifies every user
+  getAnnouncements:    (params)      => apiClient.get('/notifications/announcements/', { params }),
+  createAnnouncement:  (data)        => apiClient.post('/notifications/announcements/', data),
+  updateAnnouncement:  (id, data)    => apiClient.patch(`/notifications/announcements/${id}/`, data),
+  deleteAnnouncement:  (id)          => apiClient.delete(`/notifications/announcements/${id}/`),
 }
 
 /**

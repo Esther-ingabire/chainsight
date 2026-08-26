@@ -50,12 +50,13 @@ function VehicleCard({ vehicle, onSaved }) {
       const res = await transportApi.updateVehicle(vehicle.id, payload)
       onSaved(res.data)
       toast.success('Vehicle updated')
-    } catch {
-      onSaved({ ...vehicle, ...payload })
-      toast.success('Vehicle updated')
+      setForm(null)
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : 'Could not update vehicle'
+      toast.error(msg)
     } finally {
       setSaving(false)
-      setForm(null)
     }
   }
 

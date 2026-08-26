@@ -139,23 +139,10 @@ export default function StockManagement() {
       toast.success('Stock record added')
       setShowAdd(false)
       setForm(BLANK_FORM)
-    } catch {
-      toast.error('Failed to save — applied locally')
-      const cropObj = crops.find(c => String(c.id) === String(form.crop))
-      const newItem = {
-        id: Date.now(),
-        crop_name: isOther ? form.customCropName.trim() : (cropObj?.name || 'New Crop'),
-        crop: form.crop,
-        notes: form.notes,
-        quantity_kg: Number(form.quantity_kg),
-        quality_grade: form.quality_grade,
-        harvest_date: form.harvest_date,
-        available_from: form.available_from,
-        is_available: true,
-      }
-      setStock(prev => [newItem, ...prev])
-      setShowAdd(false)
-      setForm(BLANK_FORM)
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : 'Could not add stock record'
+      toast.error(msg)
     } finally {
       setSaving(false)
     }

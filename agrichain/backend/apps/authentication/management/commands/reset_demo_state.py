@@ -319,6 +319,58 @@ class Command(BaseCommand):
                         ProduceRequest.objects.create(**data)
                     self.stdout.write('  Created 6 demo produce requests (DECLINED/NEGOTIATING/COMPLETED/CANCELLED).')
 
+        # ── 7b. Ensure each cooperative has several PENDING produce requests ──
+        # Mirrors the (distributor, crop) combinations seed_demo_data.py creates, so a
+        # cooperative manager who accepted/declined some of these during a demo still sees
+        # a healthy "pending requests awaiting your response" count on the next reset,
+        # not just whatever happened to survive the last session.
+        from apps.cooperatives.models import Crop as CropM2
+
+        coop_by_name = {
+            'Musanze': Cooperative.objects.filter(name='Musanze Farmers Cooperative').first(),
+            'Rubavu':  Cooperative.objects.filter(name='Rubavu Farmers Union').first(),
+            'Nyanza':  Cooperative.objects.filter(name='Nyanza Agricultural Cooperative').first(),
+            'Kigali':  Cooperative.objects.filter(name='Kigali Urban Farmers Cooperative').first(),
+        }
+        dist_kigali = Distributor.objects.filter(user__email='s.nkurunziza@chainsight.demo').first()
+        dist_north  = Distributor.objects.filter(user__email='e.ingabire@chainsight.demo').first()
+
+        if dist_kigali and dist_north and all(coop_by_name.values()):
+            pending_cfg = [
+                # (district, distributor, crop_name, qty_kg, grade, days_from_now)
+                ('Musanze', dist_kigali, 'Tomatoes', 350, 'A', 14),
+                ('Musanze', dist_north,  'Maize',    500, 'B', 21),
+                ('Musanze', dist_north,  'Tomatoes', 280, 'B',  9),
+                ('Rubavu',  dist_kigali, 'Coffee',   400, 'A', 18),
+                ('Rubavu',  dist_north,  'Coffee',   260, 'B',  8),
+                ('Rubavu',  dist_kigali, 'Bananas',  320, 'A', 15),
+                ('Nyanza',  dist_north,  'Potatoes', 450, 'B', 12),
+                ('Nyanza',  dist_kigali, 'Potatoes', 380, 'A', 16),
+                ('Nyanza',  dist_north,  'Sweet Potatoes', 300, 'B', 11),
+                ('Kigali',  dist_kigali, 'Avocados', 300, 'A', 10),
+                ('Kigali',  dist_north,  'Avocados', 220, 'B',  7),
+                ('Kigali',  dist_kigali, 'Maize',    500, 'A', 13),
+            ]
+            topped_up = 0
+            for district, dist, crop_name, qty, grade, days in pending_cfg:
+                crop = CropM2.objects.filter(name=crop_name).first()
+                if not crop:
+                    continue
+                _, created = ProduceRequest.objects.get_or_create(
+                    distributor=dist, cooperative=coop_by_name[district], crop=crop,
+                    status='PENDING',
+                    defaults=dict(
+                        quantity_kg=qty,
+                        quality_grade_required=grade,
+                        required_delivery_date=(now + datetime.timedelta(days=days)).date(),
+                        additional_notes='',
+                    ),
+                )
+                if created:
+                    topped_up += 1
+            if topped_up:
+                self.stdout.write(f'  Topped up {topped_up} pending produce request(s) back to the full demo set.')
+
         # ── 8. Reset warehouse rental requests ────────────────────────────
         from apps.cooperatives.models import ColdStorageFacility, WarehouseRentalRequest, Cooperative
 

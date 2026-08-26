@@ -919,9 +919,16 @@ class Command(BaseCommand):
             # (district, distributor, crop_name, qty_kg, grade, days_from_now)
             ('Musanze', dist_kigali, 'Tomatoes', 350, 'A', 14),
             ('Musanze', dist_north,  'Maize',    500, 'B', 21),
+            ('Musanze', dist_north,  'Tomatoes', 280, 'B',  9),
             ('Rubavu',  dist_kigali, 'Coffee',   400, 'A', 18),
+            ('Rubavu',  dist_north,  'Coffee',   260, 'B',  8),
+            ('Rubavu',  dist_kigali, 'Bananas',  320, 'A', 15),
             ('Nyanza',  dist_north,  'Potatoes', 450, 'B', 12),
+            ('Nyanza',  dist_kigali, 'Potatoes', 380, 'A', 16),
+            ('Nyanza',  dist_north,  'Sweet Potatoes', 300, 'B', 11),
             ('Kigali',  dist_kigali, 'Avocados', 300, 'A', 10),
+            ('Kigali',  dist_north,  'Avocados', 220, 'B',  7),
+            ('Kigali',  dist_kigali, 'Maize',    500, 'A', 13),
         ]
         count = 0
         today = date.today()

@@ -253,10 +253,10 @@ export default function PendingRequests() {
         await transportApi.declineRequest(req.id, { reason: reason || 'Declined' })
         toast.success('Request declined')
       }
-    } catch {
-      toast.success(`Request ${action === 'accept' ? 'accepted' : 'declined'}`)
-    } finally {
       setRequests(prev => prev.filter(r => r.id !== req.id))
+    } catch (err) {
+      toast.error(err.response?.data?.detail || `Failed to ${action} request`)
+    } finally {
       setActing(null)
     }
   }
@@ -290,18 +290,24 @@ export default function PendingRequests() {
 
   const handleBulkAction = async (stops, action) => {
     setBulkActing(action)
-    try {
-      await Promise.all(stops.map(req =>
-        action === 'accept' ? transportApi.acceptRequest(req.id) : transportApi.declineRequest(req.id, { reason: 'Not available' })
-      ))
-      toast.success(`${stops.length} stops ${action === 'accept' ? 'accepted' : 'declined'}`)
-    } catch {
-      toast.success(`${stops.length} stops ${action === 'accept' ? 'accepted' : 'declined'}`)
-    } finally {
-      const ids = new Set(stops.map(s => s.id))
+    const results = await Promise.allSettled(stops.map(req =>
+      action === 'accept' ? transportApi.acceptRequest(req.id) : transportApi.declineRequest(req.id, { reason: 'Not available' })
+    ))
+    const succeeded = stops.filter((_, i) => results[i].status === 'fulfilled')
+    const failedCount = stops.length - succeeded.length
+    if (succeeded.length > 0) {
+      const ids = new Set(succeeded.map(s => s.id))
       setRequests(prev => prev.filter(r => !ids.has(r.id)))
-      setBulkActing(null)
     }
+    const verb = action === 'accept' ? 'accepted' : 'declined'
+    if (failedCount === 0) {
+      toast.success(`${stops.length} stops ${verb}`)
+    } else if (succeeded.length === 0) {
+      toast.error(`Failed to ${action} ${failedCount} stop${failedCount > 1 ? 's' : ''}`)
+    } else {
+      toast.error(`${succeeded.length} stops ${verb}, ${failedCount} failed`)
+    }
+    setBulkActing(null)
   }
 
   // Group requests sharing a run_id into one multi-stop run; everything else stays standalone.

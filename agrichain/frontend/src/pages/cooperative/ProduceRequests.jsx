@@ -201,13 +201,6 @@ export default function ProduceRequests() {
 
   const handleAction = async (action) => {
     setActing(true)
-    const newStatus = action === 'accept' ? 'ACCEPTED' : 'DECLINED'
-    const applyLocally = () => {
-      setRequests(prev => prev.map(r => r.id === selected.id ? { ...r, status: newStatus } : r))
-      toast.success(`Request ${action === 'accept' ? 'accepted' : 'declined'}`)
-      setSelected(null)
-      setActionNotes('')
-    }
     try {
       const res = action === 'accept'
         ? await distributionApi.acceptProduceRequest(selected.id, { notes: actionNotes })
@@ -216,8 +209,10 @@ export default function ProduceRequests() {
       toast.success(`Request ${action === 'accept' ? 'accepted' : 'declined'}`)
       setSelected(null)
       setActionNotes('')
-    } catch {
-      applyLocally()
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : `Failed to ${action} request`
+      toast.error(msg)
     } finally {
       setActing(false)
     }

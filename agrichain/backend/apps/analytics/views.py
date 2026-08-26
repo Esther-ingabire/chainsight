@@ -795,6 +795,63 @@ class MinagriBottleneckView(_MinagriBase):
         })
 
 
+class MinagriCustomReportPreviewView(_MinagriBase):
+    """
+    Live crop-level volume/loss breakdown for the Custom Reports builder, filterable by
+    crop/district/date range. Same aggregation as
+    apps.reports.views.ExportReportView._national_crops (which takes the same crop/
+    district/date_from/date_to query params) — this returns it as JSON for an on-screen
+    preview instead of a CSV/PDF file, so Export PDF/CSV always matches what was
+    previewed.
+    """
+
+    def get(self, request):
+        from apps.traceability.models import Batch
+        from django.db.models import Avg, Sum, Count
+        from apps.reports.views import ExportReportView
+
+        date_from, date_to = ExportReportView._parse_date_range(request)
+        qs = Batch.objects.filter(total_loss_pct__isnull=False)
+        if date_from:
+            qs = qs.filter(dispatch_timestamp__gte=date_from)
+        if date_to:
+            qs = qs.filter(dispatch_timestamp__lte=date_to)
+        crop = request.query_params.get('crop')
+        if crop and crop != 'All':
+            qs = qs.filter(crop__name__iexact=crop)
+        district = request.query_params.get('district')
+        if district and district != 'All':
+            qs = qs.filter(cooperative__district__iexact=district)
+
+        rows = list(
+            qs.values('crop__name')
+              .annotate(
+                  batches=Count('id'),
+                  volume_kg=Sum('dispatch_weight_kg'),
+                  avg_transit_loss=Avg('transit_loss_leg1_pct'),
+                  avg_total_loss=Avg('total_loss_pct'),
+              )
+              .order_by('-avg_total_loss')
+        )
+        summary = [
+            {
+                'crop': r['crop__name'] or 'Unknown',
+                'batches': r['batches'],
+                'volume_kg': round(float(r['volume_kg'] or 0), 1),
+                'avg_transit_loss_pct': round(float(r['avg_transit_loss'] or 0), 2),
+                'avg_total_loss_pct': round(float(r['avg_total_loss'] or 0), 2),
+            }
+            for r in rows
+        ]
+        return Response({
+            'summary': summary,
+            'chart': {
+                'categories': [s['crop'] for s in summary],
+                'volume_kg': [s['volume_kg'] for s in summary],
+            },
+        })
+
+
 class MinagriNotificationsView(_MinagriBase):
     """Rule-based alert generation for MINAGRI officers."""
 

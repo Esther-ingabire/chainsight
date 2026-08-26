@@ -11,6 +11,7 @@ export const analyticsApi = {
   getMinagriRankings:    ()       => apiClient.get('/analytics/minagri/rankings/'),
   getMinagriLossTrend:   (params) => apiClient.get('/analytics/minagri/loss-trend/', { params }),
   getMinagriBottlenecks: ()       => apiClient.get('/analytics/minagri/bottlenecks/'),
+  getMinagriCustomReportPreview: (params) => apiClient.get('/analytics/minagri/custom-report-preview/', { params }),
   getMinagriAlerts:      ()       => apiClient.get('/analytics/minagri/notifications/'),
   minagriChat:           (q)      => apiClient.post('/analytics/minagri/chat/', { question: q }),
 

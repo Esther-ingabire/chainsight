@@ -1516,6 +1516,14 @@ class ExportReportView(APIView):
             base_qs = base_qs.filter(dispatch_timestamp__gte=date_from)
         if date_to:
             base_qs = base_qs.filter(dispatch_timestamp__lte=date_to)
+        # Optional filters — used by the MINAGRI Custom Reports builder so its PDF/CSV
+        # export matches exactly what the live preview showed.
+        crop = request.query_params.get('crop')
+        if crop and crop != 'All':
+            base_qs = base_qs.filter(crop__name__iexact=crop)
+        district = request.query_params.get('district')
+        if district and district != 'All':
+            base_qs = base_qs.filter(cooperative__district__iexact=district)
 
         rows = [
             [

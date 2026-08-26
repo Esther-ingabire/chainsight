@@ -191,21 +191,10 @@ export default function StockManagement() {
       toast.success('Stock record updated')
       setShowEdit(false)
       setEditingItem(null)
-    } catch {
-      const cropObj = crops.find(c => String(c.id) === String(editForm.crop))
-      setStock(prev => prev.map(s => s.id === editingItem.id ? {
-        ...s,
-        crop_name: cropObj?.name || s.crop_name,
-        quantity_kg: Number(editForm.quantity_kg),
-        quality_grade: editForm.quality_grade,
-        harvest_date: editForm.harvest_date,
-        available_from: editForm.available_from,
-        notes: editForm.notes,
-        is_available: editForm.is_available,
-      } : s))
-      toast.success('Stock record updated (local)')
-      setShowEdit(false)
-      setEditingItem(null)
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : 'Could not update stock record'
+      toast.error(msg)
     } finally {
       setSaving(false)
     }

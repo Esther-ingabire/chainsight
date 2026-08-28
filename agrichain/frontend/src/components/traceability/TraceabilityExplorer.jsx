@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, QrCode, MapPin, CheckCircle, Truck, Package, ShoppingCart, AlertTriangle, ChevronRight, Download, Thermometer } from 'lucide-react'
 import TripTrackingMap from '../map/TripTrackingMap.jsx'
@@ -15,12 +15,6 @@ function riskFromLossPct(pct) {
   if (pct >= 5) return 'AMBER'
   return 'GREEN'
 }
-
-const MOCK_BATCHES = [
-  { id: 1, batch_id: 'a4f2c1d0-0000-0000-0000-000000000001', batch_id_short: 'A4F2C1D0', crop_name: 'Tomatoes', dispatch_weight_kg: 450, current_status: 'IN_TRANSIT_LEG1', dispatch_timestamp: '2026-06-09T08:00:00Z', cooperative_name: 'My Cooperative', total_loss_pct: null },
-  { id: 2, batch_id: 'b3c1d2e0-0000-0000-0000-000000000002', batch_id_short: 'B3C1D2E0', crop_name: 'Avocados', dispatch_weight_kg: 300, current_status: 'AT_DISTRIBUTOR',  dispatch_timestamp: '2026-06-08T09:00:00Z', cooperative_name: 'My Cooperative', total_loss_pct: 0.8, weight_at_distributor_kg: 297.6, distributor_receipt_timestamp: '2026-06-09T11:00:00Z' },
-  { id: 3, batch_id: 'c7d4e5f0-0000-0000-0000-000000000003', batch_id_short: 'C7D4E5F0', crop_name: 'Maize',    dispatch_weight_kg: 800, current_status: 'COMPLETED',       dispatch_timestamp: '2026-06-05T07:00:00Z', cooperative_name: 'My Cooperative', total_loss_pct: 4.2  },
-]
 
 // Build supply chain timeline from full batch data
 // Covers all five stages: Cooperative → Leg 1 Transit → Distributor → Leg 2 Transit → Market
@@ -140,7 +134,7 @@ export default function TraceabilityExplorer({
   initialBatch = null,   // if set, auto-opens this batch immediately on mount
 }) {
   const { user } = useAuth()
-  const [batches, setBatches] = useState(MOCK_BATCHES)
+  const [batches, setBatches] = useState([])
   const [loadingBatches, setLoadingBatches] = useState(true)
 
   const [query, setQuery] = useState('')
@@ -154,11 +148,8 @@ export default function TraceabilityExplorer({
 
   useEffect(() => {
     traceabilityApi.getBatches()
-      .then(res => {
-        const data = res.data?.results ?? res.data ?? []
-        if (data.length) setBatches(data)
-      })
-      .catch(() => {})
+      .then(res => setBatches(res.data?.results ?? res.data ?? []))
+      .catch(() => toast.error('Could not load batches'))
       .finally(() => setLoadingBatches(false))
   }, [])
 
@@ -188,14 +179,22 @@ export default function TraceabilityExplorer({
     return () => clearInterval(interval)
   }, [batch?.id])
 
+  // Guards against a stale response overwriting a newer selection — if the user clicks
+  // batch A then quickly clicks batch B before A's request resolves, A's response (if it
+  // lands after B's) must not clobber what's now on screen for B.
+  const openRequestRef = useRef(0)
+
   const openBatch = async (item) => {
+    const requestId = ++openRequestRef.current
     setBatch(null)
     setNotFound(false)
     setQuery('')
     try {
       const res = await traceabilityApi.getBatch(item.id, { _silent: true })
+      if (requestId !== openRequestRef.current) return
       setBatch(res.data)
     } catch {
+      if (requestId !== openRequestRef.current) return
       // silently fall back to list-level data so the timeline still renders
       setBatch(item)
     }

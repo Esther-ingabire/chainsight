@@ -1,16 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, MapPin, Building2, CheckCircle, Clock, Plus, RefreshCw, Navigation, Package, X, List, Map as MapIcon, Star, Phone, Mail, ShoppingBag } from 'lucide-react'
+import { Search, MapPin, Building2, CheckCircle, Clock, Plus, RefreshCw, Navigation, Package, X, List, Map as MapIcon, Phone, Mail, ShoppingBag } from 'lucide-react'
 import { marketAgentApi } from '../../api/marketAgent.js'
 import MapboxMap from '../../components/map/MapboxMap.jsx'
 import toast from 'react-hot-toast'
-
-const MOCK_DISTRIBUTORS = [
-  { id: 1, name: 'Kigali Fresh Distributors',    company_name: 'Kigali Fresh Ltd',         district: 'Gasabo',     warehouse_location: 'Kacyiru, Kigali' },
-  { id: 2, name: 'Musanze Agro Wholesale',       company_name: 'Musanze Agro Wholesale',   district: 'Musanze',    warehouse_location: 'Musanze Town' },
-  { id: 3, name: 'Huye Market Supplies',         company_name: 'Huye Supplies Ltd',        district: 'Huye',       warehouse_location: 'Huye Market Area' },
-  { id: 4, name: 'Rubavu Lakeside Distributors', company_name: 'Rubavu Distributors Ltd',  district: 'Rubavu',     warehouse_location: 'Gisenyi, Rubavu' },
-  { id: 5, name: 'Rwamagana Agri Hub',           company_name: 'Rwamagana Agri Hub',       district: 'Rwamagana',  warehouse_location: 'Rwamagana Town' },
-]
 
 // linkStatus: null = not connected, 'PENDING' = request sent, 'LINKED' = active link
 function LinkBadge({ status }) {
@@ -39,10 +31,9 @@ export default function FindDistributorsPage() {
         marketAgentApi.getMyLinks(),
       ])
       if (distRes.status === 'fulfilled') {
-        const list = distRes.value.data?.results ?? distRes.value.data ?? []
-        setDistributors(list.length ? list : MOCK_DISTRIBUTORS)
+        setDistributors(distRes.value.data?.results ?? distRes.value.data ?? [])
       } else {
-        setDistributors(MOCK_DISTRIBUTORS)
+        toast.error('Could not load distributors')
       }
       if (linkRes.status === 'fulfilled') {
         const myLinks = linkRes.value.data ?? []
@@ -231,19 +222,11 @@ export default function FindDistributorsPage() {
 
               {/* Trust signals row */}
               <div className="flex items-center gap-4 mt-4">
-                {/* Market agent rating — derived from linked agents as trust proxy */}
-                <div className="flex items-center gap-1.5">
-                  <div className="flex">
-                    {[1,2,3,4,5].map(n => {
-                      const score = Math.min(5, Math.max(3, (profileDist.linked_agents_count || 0) > 5 ? 4.5 : (profileDist.linked_agents_count || 0) > 2 ? 4.0 : 3.5))
-                      return <Star key={n} className={`w-3.5 h-3.5 ${n <= Math.round(score) ? 'fill-warning-400 text-warning-400' : 'text-gray-200'}`} />
-                    })}
-                  </div>
-                  <span className="text-xs text-gray-500">
-                    {(profileDist.linked_agents_count || 0) > 5 ? '4.5' : (profileDist.linked_agents_count || 0) > 2 ? '4.0' : '3.5'}
-                    {' '}({profileDist.linked_agents_count || 0} agent{profileDist.linked_agents_count !== 1 ? 's' : ''})
-                  </span>
-                </div>
+                {/* No real distributor rating exists yet — show the genuine linked-agent
+                    count instead of a fabricated star score. */}
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-50 text-gray-600">
+                  {profileDist.linked_agents_count || 0} agent{profileDist.linked_agents_count !== 1 ? 's' : ''} linked
+                </span>
                 {profileDist.distance_km != null && (
                   <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
                     {profileDist.distance_km} km away

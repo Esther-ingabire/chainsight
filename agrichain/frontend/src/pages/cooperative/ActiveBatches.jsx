@@ -6,35 +6,10 @@ import { reverseGeocode } from '../../lib/mapbox.js'
 
 const TRANSIT_STATUSES = ['IN_TRANSIT_LEG1', 'IN_TRANSIT_LEG2']
 
-const MOCK_BATCHES = [
-  {
-    id: 1, batch_id_short: 'A4F2C1D0', crop_name: 'Tomatoes',
-    dispatch_weight_kg: 450, current_status: 'IN_TRANSIT_LEG1',
-    dispatch_timestamp: '2026-06-09T08:00:00Z',
-    transporter_name: 'Claude Mugisha', requires_refrigeration: true, total_loss_pct: 0,
-  },
-  {
-    id: 2, batch_id_short: 'B3C1D2E0', crop_name: 'Avocados',
-    dispatch_weight_kg: 300, current_status: 'IN_TRANSIT_LEG1',
-    dispatch_timestamp: '2026-06-09T09:00:00Z',
-    transporter_name: 'Marie Uwase', requires_refrigeration: false, total_loss_pct: 0,
-  },
-  {
-    id: 3, batch_id_short: 'C7D4E5F0', crop_name: 'Maize',
-    dispatch_weight_kg: 800, current_status: 'AT_DISTRIBUTOR',
-    dispatch_timestamp: '2026-06-06T07:00:00Z',
-    transporter_name: 'Jean Habimana', requires_refrigeration: false,
-    weight_at_distributor_kg: 783, quality_at_distributor: 'B',
-    distributor_receipt_timestamp: '2026-06-07T14:30:00Z',
-    transit_loss_leg1_pct: 2.1, total_loss_pct: 2.1,
-  },
-]
-
-
 // onViewMap(batch) — called when the user wants to see the batch's route on the
 // in-app map (switches to the Traceability tab in the parent TraceabilityView).
 export default function ActiveBatches({ onViewMap }) {
-  const [batches, setBatches] = useState(MOCK_BATCHES)
+  const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
@@ -42,17 +17,18 @@ export default function ActiveBatches({ onViewMap }) {
   const [iotData, setIotData] = useState(null)
   const [placeName, setPlaceName] = useState(null)
   const geocodeRef = useRef(null)
+  // Guards against a stale response overwriting a newer selection — see openBatch in
+  // TraceabilityExplorer.jsx for the same pattern.
+  const openRequestRef = useRef(0)
 
   useEffect(() => {
     traceabilityApi.getBatches()
-      .then(res => {
-        const data = res.data?.results ?? res.data ?? []
-        if (data.length) setBatches(data)
-      })
+      .then(res => setBatches(res.data?.results ?? res.data ?? []))
       .catch(() => {})
   }, [])
 
   const openDetail = async (batch) => {
+    const requestId = ++openRequestRef.current
     setSelected(batch)
     setDetail(null)
     setIotData(null)
@@ -60,14 +36,16 @@ export default function ActiveBatches({ onViewMap }) {
     setLoadingDetail(true)
     try {
       const res = await traceabilityApi.getBatch(batch.id, { _silent: true })
+      if (requestId !== openRequestRef.current) return
       setDetail(res.data)
     } catch {
       // silently keep basic data from list
     } finally {
-      setLoadingDetail(false)
+      if (requestId === openRequestRef.current) setLoadingDetail(false)
     }
     if (TRANSIT_STATUSES.includes(batch.current_status)) {
       traceabilityApi.getBatchIoT(batch.id).then(async res => {
+        if (requestId !== openRequestRef.current) return
         const iot = res.data
         setIotData(iot)
         // Reverse geocode the latest GPS fix to show a real place name
@@ -78,7 +56,7 @@ export default function ActiveBatches({ onViewMap }) {
           const key = geocodeRef.current
           const name = await reverseGeocode(track.latitude, track.longitude)
           // Only apply if user hasn't opened another batch in the meantime
-          if (geocodeRef.current === key) setPlaceName(name)
+          if (requestId === openRequestRef.current && geocodeRef.current === key) setPlaceName(name)
         }
       }).catch(() => {})
     }

@@ -184,13 +184,23 @@ class MinagriExecutiveDashboardView(_MinagriBase):
 
     def get(self, request):
         from apps.traceability.models import Batch
-        from django.db.models import Avg, Sum
+        from apps.iot.models import IoTReading
+        from django.db.models import Avg, Sum, Count, Q
         from django.utils import timezone
         from datetime import timedelta
 
         all_batches = Batch.objects.filter(total_loss_pct__isnull=False)
         national_loss = all_batches.aggregate(avg=Avg('total_loss_pct'))['avg'] or 0
         total_volume_kg = all_batches.aggregate(s=Sum('dispatch_weight_kg'))['s'] or 0
+
+        reading_agg = IoTReading.objects.aggregate(
+            total=Count('id'),
+            breaches=Count('id', filter=Q(is_temperature_breach=True) | Q(is_humidity_breach=True)),
+        )
+        cold_chain_compliance_pct = (
+            round((1 - reading_agg['breaches'] / reading_agg['total']) * 100, 1)
+            if reading_agg['total'] else 100.0
+        )
 
         district_rows = list(
             Batch.objects.filter(total_loss_pct__isnull=False)
@@ -227,7 +237,7 @@ class MinagriExecutiveDashboardView(_MinagriBase):
             'loss_rate_pct': round(float(national_loss), 1),
             'total_volume_tons': round(float(total_volume_kg) / 1000, 1),
             'high_risk_districts': high_risk,
-            'cold_chain_compliance_pct': 92.8,
+            'cold_chain_compliance_pct': cold_chain_compliance_pct,
             'monthly_trend': monthly_trend,
             'top_loss_crops': [
                 {'crop': r['crop__name'] or 'Unknown', 'loss_pct': round(float(r['avg_loss'] or 0), 2)}

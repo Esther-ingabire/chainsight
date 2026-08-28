@@ -11,18 +11,6 @@ import { cooperativesApi } from '../../api/cooperatives.js'
 import toast from 'react-hot-toast'
 
 
-const MOCK_REQUESTS = [
-  { id: 'TR-001', cargo_description: 'Tomatoes', estimated_cargo_weight_kg: 450, pickup_location: 'Musanze', destination: 'Kigali Central Market', required_pickup_datetime: '2026-06-12T07:00:00Z', requires_refrigeration: true,  status: 'IN_TRANSIT', transporter_name: 'Claude Mugisha' },
-  { id: 'TR-002', cargo_description: 'Avocados', estimated_cargo_weight_kg: 300, pickup_location: 'Huye',    destination: 'Kigali',                 required_pickup_datetime: '2026-06-13T08:00:00Z', requires_refrigeration: false, status: 'PENDING',    transporter_name: 'Marie Uwase' },
-  { id: 'TR-003', cargo_description: 'Beans',    estimated_cargo_weight_kg: 600, pickup_location: 'Musanze', destination: 'Huye Market',            required_pickup_datetime: '2026-06-11T06:00:00Z', requires_refrigeration: false, status: 'COMPLETED',  transporter_name: 'Jean Habimana' },
-]
-
-const MOCK_TRANSPORTERS = [
-  { id: 1, first_name: 'Claude',  last_name: 'Mugisha',   phone_number: '+250781234567', operating_districts: 'Musanze, Kigali' },
-  { id: 2, first_name: 'Marie',   last_name: 'Uwase',     phone_number: '+250782345678', operating_districts: 'Huye, Kigali' },
-  { id: 3, first_name: 'Jean',    last_name: 'Habimana',  phone_number: '+250783456789', operating_districts: 'Rwamagana, Huye' },
-]
-
 const BLANK_REQUEST = {
   transporter: '',
   cargo_description: '',
@@ -87,19 +75,13 @@ export default function TransportRequests() {
 
   useEffect(() => {
     transportApi.getMyRequests(undefined, { _silent: true })
-      .then(res => {
-        const data = res.data?.results ?? res.data ?? []
-        setRequests(data.length ? data : MOCK_REQUESTS)
-      })
-      .catch(() => setRequests(MOCK_REQUESTS))
+      .then(res => setRequests(res.data?.results ?? res.data ?? []))
+      .catch(() => toast.error('Could not load transport requests'))
       .finally(() => setLoadingRequests(false))
 
     cooperativesApi.getMyTransporters({ _silent: true })
-      .then(res => {
-        const data = res.data?.results ?? res.data ?? []
-        setTransporters(data.length ? data : MOCK_TRANSPORTERS)
-      })
-      .catch(() => setTransporters(MOCK_TRANSPORTERS))
+      .then(res => setTransporters(res.data?.results ?? res.data ?? []))
+      .catch(() => toast.error('Could not load transporters'))
       .finally(() => setLoadingTransporters(false))
 
     setLoadingDirectory(true)

@@ -1,33 +1,31 @@
 import { useState, useEffect, useCallback } from 'react'
 import { TrendingDown, Truck, ShoppingBag, Download, Info } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { distributionApi } from '../../api/distribution.js'
 
-const MOCK_COMPARISON = {
-  self_collect_avg_loss_pct: 3.5,
-  transporter_avg_loss_pct: 0.8,
-  self_collect_batches: 14,
-  transporter_batches: 22,
+// Weekly DeliveryMethodComparison rows -> up to 6 most recent calendar months, averaged.
+function groupWeeklyByMonth(rows) {
+  const byMonth = {}
+  rows.forEach(r => {
+    const d = new Date(r.week_starting)
+    if (Number.isNaN(d.getTime())) return
+    const key = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    if (!byMonth[key]) byMonth[key] = { self: [], trans: [], sortKey: d.getTime() }
+    if (r.self_collection_avg_loss_pct != null) byMonth[key].self.push(Number(r.self_collection_avg_loss_pct))
+    if (r.transporter_avg_loss_pct != null) byMonth[key].trans.push(Number(r.transporter_avg_loss_pct))
+  })
+  const avg = arr => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : 0
+  return Object.entries(byMonth)
+    .sort((a, b) => a[1].sortKey - b[1].sortKey)
+    .slice(-6)
+    .map(([month, v]) => ({ month, self_collect: avg(v.self), transporter: avg(v.trans) }))
 }
-
-const MOCK_MONTHLY = [
-  { month: 'Jan 2026', self_collect: 4.2, transporter: 0.9 },
-  { month: 'Feb 2026', self_collect: 3.8, transporter: 1.1 },
-  { month: 'Mar 2026', self_collect: 3.1, transporter: 0.7 },
-  { month: 'Apr 2026', self_collect: 4.5, transporter: 0.8 },
-  { month: 'May 2026', self_collect: 3.9, transporter: 0.6 },
-  { month: 'Jun 2026', self_collect: 3.5, transporter: 0.8 },
-]
-
-const MOCK_CROP_LOSS = [
-  { crop: 'Tomatoes',  batches: 8,  avg_loss_pct: 5.2, total_loss_kg: 2400 },
-  { crop: 'Avocados',  batches: 6,  avg_loss_pct: 2.1, total_loss_kg: 840  },
-  { crop: 'Coffee',    batches: 10, avg_loss_pct: 0.4, total_loss_kg: 120  },
-  { crop: 'Potatoes',  batches: 5,  avg_loss_pct: 3.8, total_loss_kg: 950  },
-  { crop: 'Beans',     batches: 7,  avg_loss_pct: 1.9, total_loss_kg: 380  },
-]
 
 // Simple SVG bar chart — no external dependency
 function SimpleBarChart({ data }) {
+  if (data.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-10">No monthly data yet.</p>
+  }
   const maxVal = Math.max(...data.flatMap(d => [d.self_collect, d.transporter])) + 1
   const barW = 18
   const gap = 4
@@ -96,19 +94,40 @@ function LossCard({ label, pct, batches, icon: Icon, color, textColor, borderCol
 // `embedded` prop — when true, hides the standalone page header and export buttons
 // since the Reports page provides its own context and download options.
 export default function DistributionAnalytics({ embedded = false }) {
-  const [comparison, setComparison] = useState(MOCK_COMPARISON)
-  const [monthly] = useState(MOCK_MONTHLY)
-  const [cropLoss] = useState(MOCK_CROP_LOSS)
+  const [comparison, setComparison] = useState({})
+  const [monthly, setMonthly] = useState([])
+  const [cropLoss, setCropLoss] = useState([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await distributionApi.getDeliveryMethodComparison()
-      const data = res.data
-      if (data?.self_collect_avg_loss_pct !== undefined) setComparison(data)
-    } catch {}
-    finally { setLoading(false) }
+      const [summaryRes, weeklyRes] = await Promise.allSettled([
+        distributionApi.getDistributionAnalytics(),
+        distributionApi.getDeliveryMethodComparison(),
+      ])
+      if (summaryRes.status === 'fulfilled') {
+        const d = summaryRes.value.data
+        setComparison({
+          self_collect_avg_loss_pct: d.self_collection_avg_loss_pct,
+          transporter_avg_loss_pct: d.transporter_avg_loss_pct,
+          self_collect_batches: d.self_collection_count,
+          transporter_batches: d.transporter_count,
+        })
+        setCropLoss((d.crop_breakdown || []).map(c => ({
+          crop: c.crop, batches: c.batch_count,
+          avg_loss_pct: c.avg_loss_pct, total_loss_kg: c.total_loss_kg,
+        })))
+      } else {
+        toast.error('Could not load distribution analytics')
+      }
+      if (weeklyRes.status === 'fulfilled') {
+        const rows = weeklyRes.value.data?.results ?? weeklyRes.value.data ?? []
+        setMonthly(groupWeeklyByMonth(rows))
+      }
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -170,7 +189,7 @@ export default function DistributionAnalytics({ embedded = false }) {
           <LossCard
             label="Self-Collection Average Loss"
             pct={selfLoss}
-            batches={comparison.self_collect_batches || 14}
+            batches={comparison.self_collect_batches || 0}
             icon={ShoppingBag}
             color="bg-amber-50 text-amber-600"
             textColor="text-amber-500"
@@ -184,7 +203,7 @@ export default function DistributionAnalytics({ embedded = false }) {
           <LossCard
             label="Transporter Delivery Average Loss"
             pct={transLoss}
-            batches={comparison.transporter_batches || 22}
+            batches={comparison.transporter_batches || 0}
             icon={Truck}
             color="bg-success-50 text-success-600"
             textColor="text-success-600"

@@ -1,4 +1,4 @@
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Sum
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -147,6 +147,7 @@ class DistributionAnalyticsView(APIView):
         crop_data = batches.values('crop__name').annotate(
             count=Count('id'),
             avg_loss=Avg('transit_loss_leg1_pct'),
+            total_loss=Sum('total_loss_kg'),
         ).order_by('-avg_loss')
 
         return Response({
@@ -161,6 +162,7 @@ class DistributionAnalyticsView(APIView):
                     'crop': row['crop__name'],
                     'batch_count': row['count'],
                     'avg_loss_pct': round(float(row['avg_loss'] or 0), 2),
+                    'total_loss_kg': round(float(row['total_loss'] or 0), 1),
                 }
                 for row in crop_data
             ],

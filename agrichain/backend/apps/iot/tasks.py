@@ -35,7 +35,7 @@ def simulate_sensor_readings():
     # transit, since those get real sensor data mirrored in from the ESP8266 storage device
     # (see IoTReadingViewSet.perform_create) and shouldn't also receive fake simulated readings.
     active_trips = Trip.objects.filter(
-        pickup_confirmed_at__isnull=True,
+        pickup_confirmed_at__isnull=False,
         delivery_confirmed_at__isnull=True,
         transport_request__vehicle__has_iot_temperature=True
     ).select_related("transport_request__vehicle")

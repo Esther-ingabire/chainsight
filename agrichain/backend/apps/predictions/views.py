@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,12 +13,28 @@ class LossPredictionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = LossPrediction.objects.all()
         if user.role == 'COOPERATIVE_MANAGER':
             try:
-                qs = qs.filter(batch__cooperative=user.cooperative)
+                qs = LossPrediction.objects.filter(batch__cooperative=user.cooperative)
             except Exception:
                 return LossPrediction.objects.none()
+        elif user.role == 'DISTRIBUTOR':
+            try:
+                dist = user.distributor_profile
+                qs = LossPrediction.objects.filter(
+                    Q(batch__received_by_distributor=dist) | Q(order__distributor=dist)
+                ).distinct()
+            except Exception:
+                return LossPrediction.objects.none()
+        elif user.role == 'MARKET_AGENT':
+            try:
+                qs = LossPrediction.objects.filter(order__market_agent=user.market_agent_profile)
+            except Exception:
+                return LossPrediction.objects.none()
+        elif user.role in ('ADMIN', 'MINAGRI_OFFICER'):
+            qs = LossPrediction.objects.all()
+        else:
+            return LossPrediction.objects.none()
         risk = self.request.query_params.get('risk')
         stage = self.request.query_params.get('stage')
         batch = self.request.query_params.get('batch')

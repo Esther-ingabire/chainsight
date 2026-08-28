@@ -33,14 +33,6 @@ const statusStyles = {
 
 const statusLabel = { PENDING: 'Pending', ACCEPTED: 'Accepted', DECLINED: 'Declined' }
 
-const MOCK_REQUESTS = [
-  { id: 101, distributor_name: 'Kigali Fresh Distributors', crop_name: 'Tomatoes', quantity_kg: 500,  quality_grade_required: 'A', required_delivery_date: '2026-06-15', status: 'PENDING',  created_at: '2026-06-09T08:00:00Z', additional_notes: 'Prefer early morning delivery.' },
-  { id: 102, distributor_name: 'Southern Produce Ltd',      crop_name: 'Avocados', quantity_kg: 300,  quality_grade_required: 'B', required_delivery_date: '2026-06-16', status: 'PENDING',  created_at: '2026-06-09T10:00:00Z', additional_notes: '' },
-  { id: 103, distributor_name: 'Musanze Wholesalers',       crop_name: 'Potatoes', quantity_kg: 1000, quality_grade_required: 'A', required_delivery_date: '2026-06-17', status: 'ACCEPTED', created_at: '2026-06-08T07:00:00Z', additional_notes: '' },
-  { id: 104, distributor_name: 'Huye Agro Traders',         crop_name: 'Beans',    quantity_kg: 450,  quality_grade_required: 'A', required_delivery_date: '2026-06-12', status: 'DECLINED', created_at: '2026-06-07T09:00:00Z', additional_notes: 'Urgent order.' },
-  { id: 105, distributor_name: 'Rwamagana Fresh Co.',       crop_name: 'Maize',    quantity_kg: 800,  quality_grade_required: 'B', required_delivery_date: '2026-06-20', status: 'PENDING',  created_at: '2026-06-10T06:00:00Z', additional_notes: '' },
-]
-
 export default function ProduceRequests() {
   const { user } = useAuth()
   const [requests, setRequests] = useState([])
@@ -137,11 +129,8 @@ export default function ProduceRequests() {
 
   useEffect(() => {
     distributionApi.getMyProduceRequests()
-      .then(res => {
-        const data = res.data?.results ?? res.data ?? []
-        setRequests(data.length ? data : MOCK_REQUESTS)
-      })
-      .catch(() => setRequests(MOCK_REQUESTS))
+      .then(res => setRequests(res.data?.results ?? res.data ?? []))
+      .catch(() => toast.error('Could not load produce requests'))
       .finally(() => setLoading(false))
   }, [])
 

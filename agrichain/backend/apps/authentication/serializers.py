@@ -127,7 +127,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model  = User
         fields = ["id","username","first_name","last_name","email","phone_number","role","organization_name","district","language_preference","is_active","is_verified","must_change_password","mfa_enabled","created_at","avatar_url"]
-        read_only_fields = ["id","role","is_verified","must_change_password","created_at","avatar_url"]
+        # mfa_enabled only ever changes through mfa_enable (requires a verified OTP code) or
+        # mfa_disable (requires the user's current password) — never client-settable directly,
+        # or an admin's plain PATCH could flip a user's 2FA on/off without either check.
+        read_only_fields = ["id","role","is_verified","must_change_password","mfa_enabled","created_at","avatar_url"]
 
     def get_avatar_url(self, obj):
         if not obj.avatar:

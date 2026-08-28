@@ -15,38 +15,48 @@ from apps.notifications.models import Notification
 from apps.notifications.services import notify
 
 
+def _scoped_batches(user):
+    """
+    Batches this user has a legitimate relationship to. Shared by BatchViewSet.get_queryset,
+    BatchViewSet.lookup, and QRCodeScanEventViewSet.get_queryset so batch-detail and
+    scan-event access always follow the same rules as the batch list — a `lookup` or scan
+    query can't bypass scoping just because it takes an id/batch_id directly instead of
+    going through the paginated list.
+    """
+    if user.role == 'COOPERATIVE_MANAGER':
+        try:
+            return Batch.objects.filter(cooperative=user.cooperative)
+        except Exception:
+            return Batch.objects.none()
+    if user.role == 'DISTRIBUTOR':
+        try:
+            dist = user.distributor_profile
+            # Include both received batches and in-transit batches destined for this distributor
+            return Batch.objects.filter(
+                Q(received_by_distributor=dist) |
+                Q(supply_agreement__produce_request__distributor=dist)
+            ).distinct()
+        except Exception:
+            return Batch.objects.none()
+    if user.role in ('TRANSPORTER', 'TRANSPORT_COMPANY'):
+        try:
+            transporter = user.transporter_profile
+            return (
+                Batch.objects.filter(transport_request_leg1__transporter=transporter) |
+                Batch.objects.filter(transport_request_leg2__transporter=transporter)
+            ).distinct()
+        except Exception:
+            return Batch.objects.none()
+    if user.role in ('ADMIN', 'MINAGRI_OFFICER'):
+        return Batch.objects.all()
+    return Batch.objects.none()
+
+
 class BatchViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if user.role == 'COOPERATIVE_MANAGER':
-            try:
-                return Batch.objects.filter(cooperative=user.cooperative)
-            except Exception:
-                return Batch.objects.none()
-        if user.role == 'DISTRIBUTOR':
-            try:
-                dist = user.distributor_profile
-                # Include both received batches and in-transit batches destined for this distributor
-                return Batch.objects.filter(
-                    Q(received_by_distributor=dist) |
-                    Q(supply_agreement__produce_request__distributor=dist)
-                ).distinct()
-            except Exception:
-                return Batch.objects.none()
-        if user.role in ('TRANSPORTER', 'TRANSPORT_COMPANY'):
-            try:
-                transporter = user.transporter_profile
-                return (
-                    Batch.objects.filter(transport_request_leg1__transporter=transporter) |
-                    Batch.objects.filter(transport_request_leg2__transporter=transporter)
-                ).distinct()
-            except Exception:
-                return Batch.objects.none()
-        if user.role in ('ADMIN', 'MINAGRI_OFFICER'):
-            return Batch.objects.all()
-        return Batch.objects.none()
+        return _scoped_batches(self.request.user)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -145,7 +155,7 @@ class BatchViewSet(viewsets.ModelViewSet):
         if not batch_id:
             return Response({'detail': 'batch_id query param required.'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            batch = Batch.objects.get(batch_id=batch_id)
+            batch = self.get_queryset().get(batch_id=batch_id)
             return Response(BatchSerializer(batch).data)
         except Batch.DoesNotExist:
             return Response({'detail': 'Batch not found.'}, status=status.HTTP_404_NOT_FOUND)
@@ -256,10 +266,11 @@ class QRCodeScanEventViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        qs = QRCodeScanEvent.objects.filter(batch__in=_scoped_batches(self.request.user))
         batch_id = self.request.query_params.get('batch')
         if batch_id:
-            return QRCodeScanEvent.objects.filter(batch_id=batch_id)
-        return QRCodeScanEvent.objects.all()
+            qs = qs.filter(batch_id=batch_id)
+        return qs
 
 
 class PublicBatchTrackView(APIView):

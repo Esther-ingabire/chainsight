@@ -111,6 +111,7 @@ class BatchListSerializer(serializers.ModelSerializer):
     batch_id_short = serializers.SerializerMethodField()
     destination = serializers.SerializerMethodField()
     ordered_quantity_kg = serializers.SerializerMethodField()
+    delivery_method = serializers.SerializerMethodField()
 
     class Meta:
         model = Batch
@@ -122,7 +123,7 @@ class BatchListSerializer(serializers.ModelSerializer):
             'distributor_receipt_timestamp',
             'transit_loss_leg1_pct', 'total_loss_pct',
             'transport_request_leg1', 'transport_request_leg2', 'destination',
-            'mismatch_reported', 'mismatch_description',
+            'mismatch_reported', 'mismatch_description', 'delivery_method',
         ]
 
     def get_batch_id_short(self, obj):
@@ -133,3 +134,11 @@ class BatchListSerializer(serializers.ModelSerializer):
 
     def get_ordered_quantity_kg(self, obj):
         return _batch_ordered_quantity(obj)
+
+    def get_delivery_method(self, obj):
+        # How this batch left the cooperative (leg 1) — set by the distributor on the
+        # ProduceRequest, not to be confused with Order.delivery_method (leg 2, distributor
+        # to market agent).
+        if obj.supply_agreement_id:
+            return obj.supply_agreement.produce_request.delivery_method
+        return None

@@ -1,46 +1,17 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js'
-import { Download, FileText, FileSpreadsheet, TrendingDown, Package, Truck, ShoppingCart, Printer } from 'lucide-react'
+import { Download, FileSpreadsheet, TrendingDown, Package, Truck, ShoppingCart, Printer } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { distributionApi } from '../../api/distribution.js'
+import { traceabilityApi } from '../../api/traceability.js'
 import { saveAs } from 'file-saver'
-import { format, subMonths } from 'date-fns'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
-const MONTHS = Array.from({ length: 6 }, (_, i) => format(subMonths(new Date(), 5 - i), 'MMM yyyy'))
-
-const MOCK_MONTHLY = [
-  { month: MONTHS[0], orders: 18, spend: 4200000, deliveries: 16, loss_kg: 42 },
-  { month: MONTHS[1], orders: 22, spend: 5100000, deliveries: 20, loss_kg: 55 },
-  { month: MONTHS[2], orders: 25, spend: 5800000, deliveries: 23, loss_kg: 38 },
-  { month: MONTHS[3], orders: 30, spend: 7200000, deliveries: 28, loss_kg: 61 },
-  { month: MONTHS[4], orders: 20, spend: 4900000, deliveries: 19, loss_kg: 29 },
-  { month: MONTHS[5], orders: 12, spend: 3100000, deliveries: 10, loss_kg: 18 },
-]
-
-const MOCK_CROPS = [
-  { crop: 'Tomatoes', qty_kg: 4200, spend: 3570000 },
-  { crop: 'Avocados', qty_kg: 2100, spend: 2520000 },
-  { crop: 'Maize', qty_kg: 6500, spend: 2600000 },
-  { crop: 'Beans', qty_kg: 1800, spend: 1620000 },
-]
-
-const MOCK_LOSS = [
-  { agent: 'Alice Mutoni', self_collection_pct: 4.2, transporter_pct: 0.9, batches: 8 },
-  { agent: 'Bernard Hakizimana', self_collection_pct: 3.8, transporter_pct: 0.7, batches: 5 },
-  { agent: 'Claire Ingabire', self_collection_pct: 5.1, transporter_pct: 1.1, batches: 6 },
-  { agent: 'Daniel Uwimana', self_collection_pct: 2.9, transporter_pct: 0.6, batches: 4 },
-]
-
-const MOCK_BATCHES = [
-  { batch_id: 'BCH-101', crop: 'Tomatoes', cooperative: 'Musanze Farmers Coop', dispatched_kg: 500, received_kg: 492, loss_kg: 8, loss_pct: 1.6, delivery_method: 'Transporter', date: '2026-06-01' },
-  { batch_id: 'BCH-102', crop: 'Avocados', cooperative: 'Huye Highlands Coop', dispatched_kg: 300, received_kg: 285, loss_kg: 15, loss_pct: 5.0, delivery_method: 'Self-collection', date: '2026-06-03' },
-  { batch_id: 'BCH-103', crop: 'Beans', cooperative: 'Rwamagana Coop', dispatched_kg: 200, received_kg: 199, loss_kg: 1, loss_pct: 0.5, delivery_method: 'Transporter', date: '2026-06-05' },
-  { batch_id: 'BCH-104', crop: 'Maize', cooperative: 'Kigali North Coop', dispatched_kg: 800, received_kg: 762, loss_kg: 38, loss_pct: 4.8, delivery_method: 'Self-collection', date: '2026-06-07' },
-]
-
 const C = { primary: '#1a5c34', self: '#f59e0b', transporter: '#1a5c34', light: '#72be97' }
+
+const DELIVERY_METHOD_LABEL = { SELF_COLLECTION: 'Self-collection', TRANSPORTER_DELIVERY: 'Transporter' }
 
 function downloadCSV(filename, rows, headers) {
   const csv = [headers.join(','), ...rows.map(r => headers.map(h => {
@@ -52,33 +23,47 @@ function downloadCSV(filename, rows, headers) {
 
 export default function DistributorReports() {
   const [section, setSection] = useState('procurement')
-  const [monthly, setMonthly] = useState(MOCK_MONTHLY)
-  const [crops, setCrops] = useState(MOCK_CROPS)
-  const [lossData, setLossData] = useState(MOCK_LOSS)
-  const [batches, setBatches] = useState(MOCK_BATCHES)
+  const [monthly, setMonthly] = useState([])
+  const [crops, setCrops] = useState([])
+  const [lossData, setLossData] = useState([])
+  const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(false)
   const printRef = useRef()
 
   useEffect(() => {
     setLoading(true)
-    distributionApi.getDistributionAnalytics({ })
+    distributionApi.getDistributionAnalytics()
       .then(res => {
         const d = res.data
-        if (d?.monthly?.length) setMonthly(d.monthly)
-        if (d?.crops?.length) setCrops(d.crops)
+        setMonthly(d.monthly_trend || [])
+        setCrops(d.crop_breakdown || [])
+        setLossData(d.agent_loss_breakdown || [])
       })
-      .catch(() => {})
-    distributionApi.getDeliveryMethodComparison({ })
-      .then(res => { if (res.data?.length) setLossData(res.data) })
-      .catch(() => {})
+      .catch(() => toast.error('Could not load distribution analytics'))
+    traceabilityApi.getBatches()
+      .then(res => {
+        const list = res.data?.results ?? res.data ?? []
+        setBatches(list.map(b => ({
+          batch_id: b.batch_id_short,
+          crop: b.crop_name,
+          cooperative: b.cooperative_name,
+          dispatched_kg: Number(b.dispatch_weight_kg || 0),
+          received_kg: b.weight_at_distributor_kg != null ? Number(b.weight_at_distributor_kg) : null,
+          loss_kg: b.weight_at_distributor_kg != null
+            ? Math.max(0, Number(b.dispatch_weight_kg || 0) - Number(b.weight_at_distributor_kg))
+            : null,
+          loss_pct: b.transit_loss_leg1_pct != null ? Number(b.transit_loss_leg1_pct) : null,
+          delivery_method: DELIVERY_METHOD_LABEL[b.delivery_method] || '—',
+          date: b.dispatch_timestamp ? b.dispatch_timestamp.slice(0, 10) : '',
+        })))
+      })
+      .catch(() => toast.error('Could not load batch traceability'))
       .finally(() => setLoading(false))
   }, [])
 
   const totalOrders = monthly.reduce((a, m) => a + m.orders, 0)
-  const totalSpend = monthly.reduce((a, m) => a + m.spend, 0)
   const totalDeliveries = monthly.reduce((a, m) => a + m.deliveries, 0)
   const totalLoss = monthly.reduce((a, m) => a + m.loss_kg, 0)
-  const totalCropKg = crops.reduce((a, c) => a + c.qty_kg, 0)
   const avgSelfLoss = lossData.length ? (lossData.reduce((a, x) => a + x.self_collection_pct, 0) / lossData.length).toFixed(1) : 0
   const avgTransLoss = lossData.length ? (lossData.reduce((a, x) => a + x.transporter_pct, 0) / lossData.length).toFixed(1) : 0
 
@@ -116,7 +101,7 @@ export default function DistributorReports() {
   const handlePrint = () => window.print()
 
   const downloadProcurementCSV = () => {
-    downloadCSV('procurement_report.csv', monthly, ['month', 'orders', 'spend', 'deliveries', 'loss_kg'])
+    downloadCSV('procurement_report.csv', monthly, ['month', 'orders', 'deliveries', 'loss_kg'])
   }
 
   const downloadLossCSV = () => {
@@ -167,10 +152,9 @@ export default function DistributorReports() {
               </button>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               {[
                 { label: 'Total orders', value: totalOrders, icon: ShoppingCart, color: 'text-primary-500' },
-                { label: 'Total spend', value: `RWF ${(totalSpend / 1000000).toFixed(1)}M`, icon: FileText, color: 'text-success-500' },
                 { label: 'Deliveries completed', value: totalDeliveries, icon: Truck, color: 'text-success-500' },
                 { label: 'Transit losses', value: `${totalLoss.toLocaleString()} kg`, icon: TrendingDown, color: 'text-warning-500' },
               ].map(s => (
@@ -192,15 +176,16 @@ export default function DistributorReports() {
                 </div>
               </div>
               <div className="card">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Top Crops by Spend</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Top Crops by Transit Loss</h3>
                 <div className="space-y-3">
+                  {crops.length === 0 && <p className="text-sm text-gray-400">No crop data yet.</p>}
                   {crops.map(c => {
-                    const pct = Math.round((c.spend / crops.reduce((a, x) => a + x.spend, 0)) * 100)
+                    const pct = Math.min(100, Math.round((c.avg_loss_pct / 8) * 100))
                     return (
                       <div key={c.crop}>
                         <div className="flex items-center justify-between text-sm mb-1">
                           <span className="font-medium text-gray-700">{c.crop}</span>
-                          <span className="text-gray-500">RWF {(c.spend / 1000000).toFixed(1)}M · {pct}%</span>
+                          <span className="text-gray-500">{c.avg_loss_pct}% avg · {c.batch_count} batches</span>
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                           <div className="h-2 rounded-full" style={{ width: `${pct}%`, backgroundColor: C.primary }} />
@@ -217,7 +202,7 @@ export default function DistributorReports() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left">
-                    {['Month', 'Orders', 'Deliveries', 'Total Spend (RWF)', 'Avg/Order (RWF)', 'Transit Loss (kg)'].map(h => (
+                    {['Month', 'Orders', 'Deliveries', 'Transit Loss (kg)'].map(h => (
                       <th key={h} className="pb-2 text-gray-500 font-medium text-right first:text-left">{h}</th>
                     ))}
                   </tr>
@@ -228,8 +213,6 @@ export default function DistributorReports() {
                       <td className="py-2.5 font-medium text-gray-900">{m.month}</td>
                       <td className="py-2.5 text-right text-gray-700">{m.orders}</td>
                       <td className="py-2.5 text-right text-gray-700">{m.deliveries}</td>
-                      <td className="py-2.5 text-right font-medium text-gray-900">{m.spend.toLocaleString()}</td>
-                      <td className="py-2.5 text-right text-gray-500">{Math.round(m.spend / m.orders).toLocaleString()}</td>
                       <td className="py-2.5 text-right">
                         <span className={m.loss_kg > 50 ? 'text-warning-600 font-medium' : 'text-gray-500'}>{m.loss_kg} kg</span>
                       </td>
@@ -350,14 +333,18 @@ export default function DistributorReports() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-gray-700">{b.dispatched_kg.toLocaleString()} kg</td>
-                      <td className="px-4 py-3 text-right text-gray-700">{b.received_kg.toLocaleString()} kg</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{b.received_kg != null ? `${b.received_kg.toLocaleString()} kg` : '—'}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className={b.loss_kg > 20 ? 'text-warning-600 font-medium' : 'text-gray-600'}>{b.loss_kg} kg</span>
+                        {b.loss_kg != null
+                          ? <span className={b.loss_kg > 20 ? 'text-warning-600 font-medium' : 'text-gray-600'}>{b.loss_kg} kg</span>
+                          : '—'}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className={b.loss_pct > 3 ? 'text-danger-600 font-medium' : b.loss_pct > 1.5 ? 'text-warning-600' : 'text-success-600'}>
-                          {b.loss_pct}%
-                        </span>
+                        {b.loss_pct != null
+                          ? <span className={b.loss_pct > 3 ? 'text-danger-600 font-medium' : b.loss_pct > 1.5 ? 'text-warning-600' : 'text-success-600'}>
+                              {b.loss_pct}%
+                            </span>
+                          : '—'}
                       </td>
                       <td className="px-4 py-3 text-right text-gray-500">{b.date}</td>
                     </tr>

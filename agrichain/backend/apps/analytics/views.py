@@ -132,8 +132,10 @@ class DistributionAnalyticsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        from django.utils import timezone
         from apps.distribution.models import Distributor, Order, CollectionNotice
         from apps.traceability.models import Batch
+        from apps.market_agents.models import CollectionConfirmation
 
         user = request.user
         if user.role not in ('DISTRIBUTOR', 'ADMIN', 'MINAGRI_OFFICER'):
@@ -156,6 +158,8 @@ class DistributionAnalyticsView(APIView):
                     'transporter_avg_loss_pct': 0,
                     'active_notices': 0,
                     'crop_breakdown': [],
+                    'monthly_trend': [],
+                    'agent_loss_breakdown': [],
                 })
 
         orders = Order.objects.filter(distributor=dist) if dist else Order.objects.all()
@@ -178,6 +182,47 @@ class DistributionAnalyticsView(APIView):
             total_loss=Sum('total_loss_kg'),
         ).order_by('-avg_loss')
 
+        # Last 6 calendar months of order/delivery/loss activity.
+        now = timezone.now()
+        monthly_trend = []
+        for m_start, m_end, label in _last_n_months(now):
+            month_orders = orders.filter(created_at__gte=m_start, created_at__lt=m_end)
+            month_batches = batches.filter(dispatch_timestamp__gte=m_start, dispatch_timestamp__lt=m_end)
+            monthly_trend.append({
+                'month': label,
+                'orders': month_orders.count(),
+                'deliveries': month_orders.filter(status='COMPLETED').count(),
+                'loss_kg': round(float(month_batches.aggregate(s=Sum('total_loss_kg'))['s'] or 0), 1),
+            })
+
+        # Per-market-agent self-collection vs transporter self-transport loss — real data
+        # from CollectionConfirmation.self_transport_loss_pct, grouped by the delivery
+        # method chosen on the order it came from.
+        confirmations = (
+            CollectionConfirmation.objects.filter(order__distributor=dist) if dist
+            else CollectionConfirmation.objects.all()
+        )
+        agent_rows = confirmations.values(
+            'market_agent_id', 'market_agent__user__first_name', 'market_agent__user__last_name',
+            'order__delivery_method',
+        ).annotate(avg_loss=Avg('self_transport_loss_pct'), count=Count('id'))
+
+        agent_map = {}
+        for row in agent_rows:
+            agent_id = row['market_agent_id']
+            if agent_id is None:
+                continue
+            entry = agent_map.setdefault(agent_id, {
+                'agent': f"{row['market_agent__user__first_name']} {row['market_agent__user__last_name']}".strip(),
+                'self_collection_pct': 0.0, 'transporter_pct': 0.0, 'batches': 0,
+            })
+            entry['batches'] += row['count']
+            if row['order__delivery_method'] == 'SELF_COLLECTION':
+                entry['self_collection_pct'] = round(float(row['avg_loss'] or 0), 2)
+            elif row['order__delivery_method'] == 'TRANSPORTER_DELIVERY':
+                entry['transporter_pct'] = round(float(row['avg_loss'] or 0), 2)
+        agent_loss_breakdown = list(agent_map.values())
+
         return Response({
             'total_orders': orders.count(),
             'self_collection_count': orders.filter(delivery_method='SELF_COLLECTION').count(),
@@ -194,6 +239,8 @@ class DistributionAnalyticsView(APIView):
                 }
                 for row in crop_data
             ],
+            'monthly_trend': monthly_trend,
+            'agent_loss_breakdown': agent_loss_breakdown,
         })
 
 

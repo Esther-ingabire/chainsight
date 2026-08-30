@@ -95,9 +95,6 @@ function getCropImage(crops = [], coopId = 0) {
   return FALLBACK_IMAGES[Math.abs(coopId) % FALLBACK_IMAGES.length]
 }
 
-// IDs used in mock data — API calls for these will always fail
-const MOCK_COOP_IDS = new Set([1, 2, 10, 11, 12, 13, 14])
-
 function ScoreBadge({ score }) {
   const pct = Math.round((score || 0) * 100)
   const color = pct >= 75 ? 'text-success-600 bg-success-50' : pct >= 50 ? 'text-warning-500 bg-warning-50' : 'text-gray-500 bg-gray-100'
@@ -162,31 +159,15 @@ export default function OrderManagement() {
   const [partnerIds, setPartnerIds] = useState(new Set())
   const [selectedOrder, setSelectedOrder] = useState(null)
 
-  const MOCK_ORDERS = [
-    { id: 101, cooperative_name: 'Musanze Coffee Coop', crop_name: 'Coffee', quantity_kg: 5000, quality_grade_required: 'A', required_delivery_date: '2026-06-25', status: 'PENDING', additional_notes: '' },
-    { id: 102, cooperative_name: 'Nyanza Potato Growers', crop_name: 'Potatoes', quantity_kg: 3000, quality_grade_required: 'B', required_delivery_date: '2026-06-20', status: 'ACCEPTED', additional_notes: '' },
-    { id: 103, cooperative_name: 'Kigali Tea Collective', crop_name: 'Tea', quantity_kg: 1500, quality_grade_required: 'A', required_delivery_date: '2026-07-01', status: 'IN_TRANSIT', additional_notes: '' },
-  ]
-
-  const MOCK_ALL_COOPS = [
-    { id: 10, name: 'Musanze Coffee Coop', district: 'Musanze', crops_specialised: ['Coffee', 'Maize'], stock_kg: 24500, composite_score: 0.88, total_batches_dispatched: 14 },
-    { id: 11, name: 'Nyanza Potato Growers', district: 'Nyanza', crops_specialised: ['Potatoes', 'Beans'], stock_kg: 18000, composite_score: 0.81, total_batches_dispatched: 9 },
-    { id: 12, name: 'Kigali Tea Collective', district: 'Kigali', crops_specialised: ['Tea', 'Maize'], stock_kg: 30000, composite_score: 0.75, total_batches_dispatched: 6 },
-    { id: 13, name: 'Huye Highlands Coop', district: 'Huye', crops_specialised: ['Avocados', 'Beans'], stock_kg: 12000, composite_score: 0.70, total_batches_dispatched: 4 },
-    { id: 14, name: 'Rwamagana Grain Coop', district: 'Rwamagana', crops_specialised: ['Maize', 'Rice'], stock_kg: 40000, composite_score: 0.65, total_batches_dispatched: 3 },
-  ]
-
   const loadOrders = useCallback(async () => {
     setLoadingOrders(true)
     try {
       const res = await distributionApi.getMyProduceRequests({})
       const list = res.data?.results ?? res.data ?? []
-      const final = list.length ? list : MOCK_ORDERS
-      setOrders(final)
-      setPartnerIds(list.length ? new Set(final.map(o => o.cooperative)) : new Set([10, 11]))
+      setOrders(list)
+      setPartnerIds(new Set(list.map(o => o.cooperative)))
     } catch {
-      setOrders(MOCK_ORDERS)
-      setPartnerIds(new Set([10, 11]))
+      toast.error('Could not load produce requests')
     }
     finally { setLoadingOrders(false) }
   }, [])
@@ -198,9 +179,10 @@ export default function OrderManagement() {
       if (q) params.search = q
       if (nearby) params.nearby = 'true'
       const res = await cooperativesApi.searchDirectory(params)
-      const list = res.data?.results ?? res.data ?? []
-      setAllCoops(list.length ? list : MOCK_ALL_COOPS.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase()) || c.district.toLowerCase().includes(q.toLowerCase())))
-    } catch { setAllCoops(MOCK_ALL_COOPS) }
+      setAllCoops(res.data?.results ?? res.data ?? [])
+    } catch {
+      toast.error('Could not load cooperatives')
+    }
     finally { setLoadingCoops(false) }
   }, [])
 
@@ -214,17 +196,15 @@ export default function OrderManagement() {
     setShowNew(true)
     // Fetch the full profile (stock records, storage facilities) in the background
     // so the modal upgrades from the lightweight directory row to real data.
-    if (!MOCK_COOP_IDS.has(coop.id)) {
-      cooperativesApi.getCooperativeDetail(coop.id).then(res => {
-        const full = res.data
-        const stockKg = (full.stock_records || []).reduce((sum, s) => sum + Number(s.quantity_kg || 0), 0)
-        // The detail endpoint's crops_specialised is a list of Crop objects ({id, name, ...}),
-        // but the directory endpoint (used for the initial card data) returns plain strings —
-        // normalize to strings so the profile modal doesn't try to render an object as a child.
-        const cropsNames = (full.crops_specialised || []).map(c => typeof c === 'string' ? c : c.name)
-        setSelectedCoop(prev => (prev && prev.id === coop.id ? { ...prev, ...full, crops_specialised: cropsNames, stock_kg: stockKg } : prev))
-      }).catch(() => {})
-    }
+    cooperativesApi.getCooperativeDetail(coop.id).then(res => {
+      const full = res.data
+      const stockKg = (full.stock_records || []).reduce((sum, s) => sum + Number(s.quantity_kg || 0), 0)
+      // The detail endpoint's crops_specialised is a list of Crop objects ({id, name, ...}),
+      // but the directory endpoint (used for the initial card data) returns plain strings —
+      // normalize to strings so the profile modal doesn't try to render an object as a child.
+      const cropsNames = (full.crops_specialised || []).map(c => typeof c === 'string' ? c : c.name)
+      setSelectedCoop(prev => (prev && prev.id === coop.id ? { ...prev, ...full, crops_specialised: cropsNames, stock_kg: stockKg } : prev))
+    }).catch(() => {})
   }
 
   const closeCoopModal = () => {
@@ -238,44 +218,26 @@ export default function OrderManagement() {
     setSaving(true)
 
     const coopId = Number(form.cooperative)
-    const isMockCoop = MOCK_COOP_IDS.has(coopId)
 
-    if (isMockCoop) {
-      // Skip the API — mock cooperative IDs don't exist in the DB
-      setOrders(prev => [{
-        id: Date.now(),
-        cooperative_name: selectedCoop?.name || 'Cooperative',
+    try {
+      const payload = {
+        cooperative: coopId,
         crop_name: form.crop_name,
         quantity_kg: Number(form.quantity_kg),
         quality_grade_required: form.quality_grade_required,
         required_delivery_date: form.required_delivery_date,
         additional_notes: form.additional_notes,
         delivery_method: form.delivery_method,
-        status: 'PENDING',
-        created_at: new Date().toISOString(),
-      }, ...prev])
-      toast.success('Request sent to cooperative')
-    } else {
-      try {
-        const payload = {
-          cooperative: coopId,
-          crop_name: form.crop_name,
-          quantity_kg: Number(form.quantity_kg),
-          quality_grade_required: form.quality_grade_required,
-          required_delivery_date: form.required_delivery_date,
-          additional_notes: form.additional_notes,
-          delivery_method: form.delivery_method,
-        }
-        const res = await distributionApi.createProduceRequest(payload)
-        setOrders(prev => [res.data, ...prev])
-        toast.success('Request sent to cooperative')
-      } catch (err) {
-        const raw = err.response?.data
-        const msg = raw ? Object.values(raw).flat().join(' ') : 'Failed to place order'
-        toast.error(msg)
-        setSaving(false)
-        return
       }
+      const res = await distributionApi.createProduceRequest(payload)
+      setOrders(prev => [res.data, ...prev])
+      toast.success('Request sent to cooperative')
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : 'Failed to place order'
+      toast.error(msg)
+      setSaving(false)
+      return
     }
 
     setSaving(false)

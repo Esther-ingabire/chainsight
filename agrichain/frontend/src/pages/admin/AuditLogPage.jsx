@@ -31,6 +31,7 @@ export default function AuditLogPage() {
   const [total, setTotal] = useState(0)
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [searchInput, setSearchInput] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   const load = useCallback(async (p = 1, overrideFilters) => {
     setLoading(true)
@@ -70,15 +71,41 @@ export default function AuditLogPage() {
 
   const hasActiveFilters = filters.action !== 'ALL' || filters.search || filters.date_from || filters.date_to
 
-  const exportCsv = () => {
-    const rows = [['Timestamp', 'Action', 'User', 'Description', 'IP Address']]
-    logs.forEach(l => rows.push([l.timestamp, l.action, l.user?.phone_number || 'System', l.description, l.ip_address || '']))
-    const csv = rows.map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `audit-log-${format(new Date(), 'yyyy-MM-dd')}.csv`; a.click()
-    URL.revokeObjectURL(url)
+  const exportCsv = async () => {
+    if (total === 0) { toast.error('No log entries to export.'); return }
+    const toastId = toast.loading(`Exporting ${total.toLocaleString()} entries…`)
+    setExporting(true)
+    try {
+      const params = {}
+      if (filters.action !== 'ALL') params.action = filters.action
+      if (filters.search) params.search = filters.search
+      if (filters.date_from) params.date_from = filters.date_from
+      if (filters.date_to) params.date_to = filters.date_to
+
+      // The current page's `logs` is at most PAGE_SIZE rows — a compliance export needs
+      // every row matching the active filters, not just what's on screen, so fetch every
+      // page rather than exporting a silently-truncated file.
+      const totalPages = Math.ceil(total / PAGE_SIZE)
+      const allLogs = []
+      for (let p = 1; p <= totalPages; p++) {
+        const res = await authApi.getAuditLogs({ ...params, page: p, page_size: PAGE_SIZE })
+        allLogs.push(...(res.data.results || res.data || []))
+      }
+
+      const rows = [['Timestamp', 'Action', 'User', 'Description', 'IP Address']]
+      allLogs.forEach(l => rows.push([l.timestamp, l.action, l.user?.phone_number || 'System', l.description, l.ip_address || '']))
+      const csv = rows.map(r => r.map(v => `"${v ?? ''}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `audit-log-${format(new Date(), 'yyyy-MM-dd')}.csv`; a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${allLogs.length.toLocaleString()} entries`, { id: toastId })
+    } catch {
+      toast.error('Could not export audit log', { id: toastId })
+    } finally {
+      setExporting(false)
+    }
   }
 
   const pages = Math.ceil(total / PAGE_SIZE)
@@ -90,8 +117,8 @@ export default function AuditLogPage() {
           <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
           <p className="text-sm text-gray-500 mt-0.5">Immutable record of all system activity. {total.toLocaleString()} total events.</p>
         </div>
-        <button onClick={exportCsv} className="btn-primary flex items-center gap-2">
-          <Download className="w-4 h-4" /> Export CSV
+        <button onClick={exportCsv} disabled={exporting} className="btn-primary flex items-center gap-2 disabled:opacity-60">
+          <Download className="w-4 h-4" /> {exporting ? 'Exporting…' : 'Export CSV'}
         </button>
       </div>
 

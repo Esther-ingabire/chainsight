@@ -151,3 +151,32 @@ class WasteReport(models.Model):
         else:
             self.market_spoilage_loss_pct = 0
         return self.market_spoilage_loss_pct
+
+
+class MarketPriceRecord(models.Model):
+    """
+    A market agent's on-the-ground price observation for a crop at a specific market —
+    the two ends of one real-time price-reporting loop: agents submit these from
+    PriceRecording (mobile), and every role browses the resulting national price board
+    on the distributor-facing Market Prices page.
+    """
+
+    class QualityGrade(models.TextChoices):
+        GRADE_A = 'A', 'Grade A — Excellent'
+        GRADE_B = 'B', 'Grade B — Good'
+        GRADE_C = 'C', 'Grade C — Fair'
+
+    market_agent  = models.ForeignKey(MarketAgent, on_delete=models.CASCADE, related_name='price_records')
+    crop          = models.ForeignKey('cooperatives.Crop', on_delete=models.PROTECT, related_name='market_price_records')
+    market_name   = models.CharField(max_length=200)
+    price_per_kg  = models.DecimalField(max_digits=10, decimal_places=2)
+    quality_grade = models.CharField(max_length=1, choices=QualityGrade.choices, default=QualityGrade.GRADE_A)
+    notes         = models.TextField(blank=True)
+    recorded_at   = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-recorded_at']
+        indexes = [models.Index(fields=['crop', 'market_name', 'recorded_at'])]
+
+    def __str__(self):
+        return f"{self.crop.name} @ {self.market_name}: {self.price_per_kg} RWF/kg ({self.market_agent})"

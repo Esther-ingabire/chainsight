@@ -1,6 +1,6 @@
 import uuid
 from rest_framework import serializers
-from .models import MarketAgent, CollectionConfirmation, WasteReport
+from .models import MarketAgent, CollectionConfirmation, WasteReport, MarketPriceRecord
 
 
 class MarketAgentSerializer(serializers.ModelSerializer):
@@ -167,3 +167,40 @@ class CollectionNoticeForAgentSerializer(serializers.Serializer):
             'AMBER': 'Amber Risk — Consider using a transporter',
             'HIGH': 'High Risk — Use a transporter',
         }[level]
+
+
+class MarketPriceRecordSerializer(serializers.ModelSerializer):
+    crop_name = serializers.CharField(source='crop.name', read_only=True)
+    market_agent_name = serializers.SerializerMethodField()
+    prev_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MarketPriceRecord
+        fields = ['id', 'crop', 'crop_name', 'market_name', 'price_per_kg', 'quality_grade',
+                  'notes', 'recorded_at', 'market_agent_name', 'prev_price']
+        read_only_fields = ['id', 'recorded_at']
+
+    def get_market_agent_name(self, obj):
+        return str(obj.market_agent)
+
+    def get_prev_price(self, obj):
+        # The most recent OTHER observation for this exact crop+market, so the frontend
+        # can show a real %-change instead of a fabricated one.
+        prev = MarketPriceRecord.objects.filter(
+            crop_id=obj.crop_id, market_name=obj.market_name, recorded_at__lt=obj.recorded_at,
+        ).order_by('-recorded_at').first()
+        return prev.price_per_kg if prev else None
+
+    def validate_price_per_kg(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Price must be greater than zero.')
+        return value
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+        if data.get('crop_name') and not data.get('crop'):
+            from apps.distribution.serializers import _resolve_crop
+            data['crop'] = _resolve_crop(data.pop('crop_name'))
+        else:
+            data.pop('crop_name', None)
+        return super().to_internal_value(data)

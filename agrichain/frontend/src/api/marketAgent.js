@@ -10,6 +10,11 @@ export const marketAgentApi = {
   getWasteReports:    ()     => apiClient.get('/market-agents/waste-reports/'),
   submitWasteReport:  (data) => apiClient.post('/market-agents/waste-reports/', data),
   submitWasteReportBatch: (data) => apiClient.post('/market-agents/waste-reports/create-batch/', data),
+  // Market price recording — this agent's own submissions
+  getMyPriceRecords:  ()     => apiClient.get('/market-agents/price-records/'),
+  recordPrice:        (data) => apiClient.post('/market-agents/price-records/', data),
+  // National price board — every role can browse, only market agents can post
+  getNationalPrices:  (params) => apiClient.get('/market-agents/price-records/national/', { params }),
   // Orders — agent places orders against distributor stock listings
   getMyOrders:        ()              => apiClient.get('/distribution/orders/'),
   placeOrder:         (data)          => apiClient.post('/distribution/orders/', data),

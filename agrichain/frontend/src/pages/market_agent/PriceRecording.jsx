@@ -1,34 +1,54 @@
-import { useState } from 'react'
-import { Plus, TrendingUp, TrendingDown } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Plus, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { marketAgentApi } from '../../api/marketAgent.js'
 
 const CROPS = ['Tomatoes', 'Avocados', 'Maize', 'Beans', 'Potatoes', 'Onions', 'Carrots', 'Cabbage']
 const MARKETS = ['Kigali Central Market', 'Kigali Kimironko', 'Huye Market', 'Musanze Market', 'Rubavu Market']
 
-const RECENT = [
-  { id: 1, crop: 'Tomatoes', price: 850, prev: 808, market: 'Kigali Central Market', recorded_at: '09:30', quality: 'A' },
-  { id: 2, crop: 'Avocados', price: 1200, prev: 1225, market: 'Kigali Central Market', recorded_at: '09:00', quality: 'A' },
-  { id: 3, crop: 'Beans', price: 900, prev: 831, market: 'Kigali Central Market', recorded_at: '08:30', quality: 'B' },
-]
+const BLANK_FORM = { crop_name: '', price_per_kg: '', market_name: 'Kigali Central Market', quality_grade: 'A', notes: '' }
 
 export default function PriceRecording() {
-  const [records, setRecords] = useState(RECENT)
-  const [form, setForm] = useState({ crop: '', price: '', market: 'Kigali Central Market', quality: 'A', notes: '' })
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
 
-  const handleSubmit = (e) => {
+  const load = useCallback(() => {
+    setLoading(true)
+    marketAgentApi.getMyPriceRecords()
+      .then(res => setRecords(res.data?.results ?? res.data ?? []))
+      .catch(() => toast.error('Could not load your price records'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
-    const now = new Date()
-    const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-    setTimeout(() => {
-      const prev = records.find(r => r.crop === form.crop)?.price || null
-      setRecords(r => [{ id: Date.now(), crop: form.crop, price: Number(form.price), prev, market: form.market, recorded_at: time, quality: form.quality }, ...r])
+    try {
+      const res = await marketAgentApi.recordPrice({
+        crop_name: form.crop_name,
+        price_per_kg: Number(form.price_per_kg),
+        market_name: form.market_name,
+        quality_grade: form.quality_grade,
+        notes: form.notes,
+      })
+      setRecords(r => [res.data, ...r])
       toast.success('Price recorded')
-      setForm(f => ({ ...f, crop: '', price: '', notes: '' }))
+      setForm(f => ({ ...BLANK_FORM, market_name: f.market_name }))
+    } catch (err) {
+      const raw = err.response?.data
+      const msg = raw ? Object.values(raw).flat().join(' ') : 'Could not record price'
+      toast.error(msg)
+    } finally {
       setSaving(false)
-    }, 500)
+    }
   }
+
+  const today = new Date().toDateString()
+  const todaysRecords = records.filter(r => new Date(r.recorded_at).toDateString() === today)
 
   return (
     <div className="space-y-6">
@@ -44,26 +64,26 @@ export default function PriceRecording() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Crop</label>
-              <select className="input" value={form.crop} onChange={e => setForm(f => ({ ...f, crop: e.target.value }))} required>
+              <select className="input" value={form.crop_name} onChange={e => setForm(f => ({ ...f, crop_name: e.target.value }))} required>
                 <option value="">Select crop…</option>
                 {CROPS.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="label">Price (RWF/kg)</label>
-              <input type="number" className="input" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} required min="0.01" step="0.01" placeholder="e.g. 850" />
+              <input type="number" className="input" value={form.price_per_kg} onChange={e => setForm(f => ({ ...f, price_per_kg: e.target.value }))} required min="0.01" step="0.01" placeholder="e.g. 850" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Market</label>
-              <select className="input" value={form.market} onChange={e => setForm(f => ({ ...f, market: e.target.value }))}>
+              <select className="input" value={form.market_name} onChange={e => setForm(f => ({ ...f, market_name: e.target.value }))}>
                 {MARKETS.map(m => <option key={m}>{m}</option>)}
               </select>
             </div>
             <div>
               <label className="label">Quality observed</label>
-              <select className="input" value={form.quality} onChange={e => setForm(f => ({ ...f, quality: e.target.value }))}>
+              <select className="input" value={form.quality_grade} onChange={e => setForm(f => ({ ...f, quality_grade: e.target.value }))}>
                 <option value="A">Grade A — Excellent</option>
                 <option value="B">Grade B — Good</option>
                 <option value="C">Grade C — Fair</option>
@@ -75,7 +95,7 @@ export default function PriceRecording() {
             <input className="input" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. Prices rising due to low supply" />
           </div>
           <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-60">
-            <Plus className="w-4 h-4" /> {saving ? 'Recording…' : 'Record Price'}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {saving ? 'Recording…' : 'Record Price'}
           </button>
         </form>
       </div>
@@ -83,28 +103,38 @@ export default function PriceRecording() {
       {/* Today's records */}
       <div className="card">
         <h2 className="text-base font-semibold text-gray-700 mb-4">Today's records</h2>
-        <div className="space-y-0">
-          {records.map(r => {
-            const change = r.prev ? ((r.price - r.prev) / r.prev * 100) : null
-            return (
-              <div key={r.id} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-                <div>
-                  <p className="font-medium text-gray-900">{r.crop}</p>
-                  <p className="text-xs text-gray-400">{r.market} · {r.recorded_at} · Grade {r.quality}</p>
+        {loading ? (
+          <div className="py-8 text-center text-gray-400"><Loader2 className="w-5 h-5 mx-auto animate-spin" /></div>
+        ) : todaysRecords.length === 0 ? (
+          <p className="text-sm text-gray-400 py-6 text-center">No prices recorded yet today.</p>
+        ) : (
+          <div className="space-y-0">
+            {todaysRecords.map(r => {
+              const prev = r.prev_price != null ? Number(r.prev_price) : null
+              const price = Number(r.price_per_kg)
+              const change = prev ? ((price - prev) / prev * 100) : null
+              return (
+                <div key={r.id} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
+                  <div>
+                    <p className="font-medium text-gray-900">{r.crop_name}</p>
+                    <p className="text-xs text-gray-400">
+                      {r.market_name} · {new Date(r.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · Grade {r.quality_grade}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-gray-900">RWF {price.toLocaleString()}/kg</p>
+                    {change !== null && (
+                      <div className={`flex items-center justify-end gap-0.5 text-xs font-medium ${change > 0 ? 'text-success-500' : change < 0 ? 'text-danger-500' : 'text-gray-400'}`}>
+                        {change > 0 ? <TrendingUp className="w-3 h-3" /> : change < 0 ? <TrendingDown className="w-3 h-3" /> : null}
+                        {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)}%` : 'No change'}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold text-gray-900">RWF {r.price.toLocaleString()}/kg</p>
-                  {change !== null && (
-                    <div className={`flex items-center justify-end gap-0.5 text-xs font-medium ${change > 0 ? 'text-success-500' : change < 0 ? 'text-danger-500' : 'text-gray-400'}`}>
-                      {change > 0 ? <TrendingUp className="w-3 h-3" /> : change < 0 ? <TrendingDown className="w-3 h-3" /> : null}
-                      {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)}%` : 'No change'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

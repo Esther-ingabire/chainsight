@@ -6,10 +6,11 @@ from django.utils import timezone
 from django.db.models import Avg, Sum, Q
 import datetime
 
-from .models import MarketAgent, CollectionConfirmation, WasteReport
+from .models import MarketAgent, CollectionConfirmation, WasteReport, MarketPriceRecord
 from .serializers import (
     MarketAgentSerializer, CollectionConfirmationSerializer,
     WasteReportSerializer, CollectionNoticeForAgentSerializer,
+    MarketPriceRecordSerializer,
 )
 from apps.authentication.permissions import IsMarketAgent
 from apps.notifications.models import Notification
@@ -230,4 +231,75 @@ class AvailableNoticesView(APIView):
             notices = notices.order_by('collection_deadline')
 
         serializer = CollectionNoticeForAgentSerializer(notices, many=True, context={'now': now})
+        return Response(serializer.data)
+
+
+class MarketPriceRecordViewSet(viewsets.ModelViewSet):
+    """
+    Market agents submit price observations (PriceRecording, mobile); every authenticated
+    role can browse the resulting national feed (MarketPrices, distributor-facing) — this
+    is a shared price board, not agent-private data, so only the write side is restricted.
+    """
+    serializer_class = MarketPriceRecordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'MARKET_AGENT':
+            try:
+                return MarketPriceRecord.objects.filter(market_agent=user.market_agent_profile)
+            except MarketAgent.DoesNotExist:
+                return MarketPriceRecord.objects.none()
+        return MarketPriceRecord.objects.all()
+
+    def perform_create(self, serializer):
+        try:
+            agent = self.request.user.market_agent_profile
+        except MarketAgent.DoesNotExist:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': 'Market agent profile not found.'})
+        serializer.save(market_agent=agent)
+
+    def perform_update(self, serializer):
+        if serializer.instance.market_agent.user_id != self.request.user.id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You can only edit your own price records.')
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.market_agent.user_id != self.request.user.id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You can only delete your own price records.')
+        instance.delete()
+
+    @action(detail=False, methods=['get'], url_path='national')
+    def national(self, request):
+        """
+        Latest observation per (crop, market) pair nationwide, each paired with the prior
+        observation for that same combination — this is what the distributor-facing Market
+        Prices board actually shows (today's price + % change), not a raw firehose of every
+        submission ever made.
+        """
+        from django.db.models import Max
+
+        latest_ts = (
+            MarketPriceRecord.objects.values('crop_id', 'market_name')
+            .annotate(latest=Max('recorded_at'))
+        )
+        # Build a queryset matching each (crop, market)'s single most-recent row without an
+        # N-query loop: OR together one exact-match filter per group.
+        from django.db.models import Q
+        combined = Q(pk__in=[])
+        for row in latest_ts:
+            combined |= Q(crop_id=row['crop_id'], market_name=row['market_name'], recorded_at=row['latest'])
+        latest_records = MarketPriceRecord.objects.filter(combined).select_related('crop', 'market_agent__user') if latest_ts else MarketPriceRecord.objects.none()
+
+        search = request.query_params.get('search', '').strip().lower()
+        if search:
+            latest_records = [
+                r for r in latest_records
+                if search in r.crop.name.lower() or search in r.market_name.lower()
+            ]
+
+        serializer = MarketPriceRecordSerializer(latest_records, many=True)
         return Response(serializer.data)

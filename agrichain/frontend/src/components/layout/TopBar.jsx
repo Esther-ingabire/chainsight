@@ -1,4 +1,4 @@
-﻿import { Bell, X, CheckCheck, AlertTriangle, Info, UserPlus, Package, Truck, Settings, LogOut, User } from 'lucide-react'
+﻿import { Bell, X, CheckCheck, AlertTriangle, Info, Settings, LogOut, User } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -10,40 +10,6 @@ const ROLE_LABELS = {
   ADMIN: 'ADMIN', COOPERATIVE_MANAGER: 'COOPERATIVE MANAGER',
   TRANSPORTER: 'TRANSPORTER', TRANSPORT_COMPANY: 'TRANSPORT COMPANY', DISTRIBUTOR: 'DISTRIBUTOR',
   MARKET_AGENT: 'MARKET AGENT', MINAGRI_OFFICER: 'MINAGRI OFFICER',
-}
-
-// Role-specific seed shown when the API returns nothing (demo / empty DB)
-const SEED_NOTIFICATIONS = {
-  ADMIN: [
-    { id: 'a1', Icon: UserPlus,      iconCls: 'text-primary-600 bg-primary-50',  title: 'New Registration Request',        body: 'A Cooperative Manager from Musanze is awaiting approval.',             ts: new Date(Date.now() - 25 * 60000),  read: false },
-    { id: 'a2', Icon: AlertTriangle, iconCls: 'text-danger-600 bg-danger-50',    title: 'Vehicle IoT Offline',             body: 'Cargo temperature sensor has been offline for 3+ hours.',              ts: new Date(Date.now() - 3 * 3600000), read: false },
-    { id: 'a3', Icon: Info,          iconCls: 'text-warning-600 bg-warning-50',  title: 'Sync Delay – Market Agent Forms', body: 'Last sync was 47 min ago. Expected every 15 min.',                    ts: new Date(Date.now() - 47 * 60000),  read: true  },
-  ],
-  COOPERATIVE_MANAGER: [
-    { id: 'c1', Icon: Package,       iconCls: 'text-primary-600 bg-primary-50',  title: 'New Produce Request',             body: 'Kigali Distributor has requested 500 kg of tomatoes.',                ts: new Date(Date.now() - 30 * 60000),  read: false },
-    { id: 'c2', Icon: AlertTriangle, iconCls: 'text-warning-600 bg-warning-50',  title: 'Low Stock Alert',                 body: 'Maize stock is below 10% capacity at Sector A cold storage.',         ts: new Date(Date.now() - 2 * 3600000), read: true  },
-    { id: 'c3', Icon: Truck,         iconCls: 'text-success-600 bg-success-50',  title: 'Batch Dispatched',                body: 'Batch #BT-2026-0041 has been picked up by the assigned transporter.', ts: new Date(Date.now() - 4 * 3600000), read: true  },
-  ],
-  DISTRIBUTOR: [
-    { id: 'd1', Icon: Truck,         iconCls: 'text-primary-600 bg-primary-50',  title: 'Batch In Transit',                body: 'Batch #BT-2026-0041 departed Musanze Cooperative — ETA 2 hrs.',        ts: new Date(Date.now() - 45 * 60000),  read: false },
-    { id: 'd2', Icon: Package,       iconCls: 'text-success-600 bg-success-50',  title: 'Order Confirmed',                 body: 'Your order for 300 kg of maize has been confirmed by the cooperative.', ts: new Date(Date.now() - 3 * 3600000), read: true  },
-  ],
-  MARKET_AGENT: [
-    { id: 'm1', Icon: Truck,         iconCls: 'text-success-600 bg-success-50',  title: 'Batch Arriving Soon',             body: 'Batch #BT-2026-0039 is approximately 12 km from your location.',       ts: new Date(Date.now() - 20 * 60000),  read: false },
-    { id: 'm2', Icon: AlertTriangle, iconCls: 'text-warning-600 bg-warning-50',  title: 'Quality Check Required',          body: 'Batch #BT-2026-0037 flagged — temperature exceeded threshold.',         ts: new Date(Date.now() - 5 * 3600000), read: true  },
-  ],
-  TRANSPORTER: [
-    { id: 't1', Icon: Info,          iconCls: 'text-primary-600 bg-primary-50',  title: 'New Pickup Assignment',           body: 'Pickup at Musanze Cooperative scheduled for 09:00.',                   ts: new Date(Date.now() - 60 * 60000),  read: false },
-    { id: 't2', Icon: Package,       iconCls: 'text-success-600 bg-success-50',  title: 'Delivery Confirmed',              body: 'Batch #BT-2026-0038 delivery confirmed by Kigali Distributor.',         ts: new Date(Date.now() - 6 * 3600000), read: true  },
-  ],
-  TRANSPORT_COMPANY: [
-    { id: 't1', Icon: Info,          iconCls: 'text-primary-600 bg-primary-50',  title: 'New Pickup Assignment',           body: 'Pickup at Musanze Cooperative scheduled for 09:00.',                   ts: new Date(Date.now() - 60 * 60000),  read: false },
-    { id: 't2', Icon: Package,       iconCls: 'text-success-600 bg-success-50',  title: 'Delivery Confirmed',              body: 'Batch #BT-2026-0038 delivery confirmed by Kigali Distributor.',         ts: new Date(Date.now() - 6 * 3600000), read: true  },
-  ],
-  MINAGRI_OFFICER: [
-    { id: 'g1', Icon: Info,          iconCls: 'text-primary-600 bg-primary-50',  title: 'Weekly Report Ready',             body: 'National supply chain summary for Week 23 is available.',              ts: new Date(Date.now() - 2 * 3600000), read: false },
-    { id: 'g2', Icon: AlertTriangle, iconCls: 'text-warning-600 bg-warning-50',  title: 'Loss Rate Spike – Eastern',       body: 'Eastern Province post-harvest loss rate rose to 18% this week.',       ts: new Date(Date.now() - 8 * 3600000), read: true  },
-  ],
 }
 
 function mapApiNotification(n) {
@@ -108,7 +74,6 @@ export default function TopBar() {
   const panelRef = useRef(null)
   const profileRef = useRef(null)
 
-  const seed = SEED_NOTIFICATIONS[user?.role] || []
   const unread = notifications.filter(n => !n.read).length
 
   // ── Step 1: initial REST load — generic account notifications, plus MINAGRI's
@@ -124,7 +89,7 @@ export default function TopBar() {
         ? (minagriRes.value.data?.alerts || []).map(mapMinagriAlert)
         : []
       const combined = [...minagriAlerts, ...generic].sort((a, b) => b.ts - a.ts)
-      setNotifications(combined.length > 0 ? combined : seed)
+      setNotifications(combined)
     })
   }, [user?.role])
 

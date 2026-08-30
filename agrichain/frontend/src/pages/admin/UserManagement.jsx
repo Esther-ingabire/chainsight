@@ -15,6 +15,7 @@ const ROLES = ['ALL', 'COOPERATIVE_MANAGER', 'TRANSPORT_COMPANY', 'TRANSPORTER',
 const CREATABLE_ROLES = ['MINAGRI_OFFICER']
 const ROLE_LABELS = { ADMIN: 'Admin', COOPERATIVE_MANAGER: 'Coop Manager', TRANSPORT_COMPANY: 'Transport Company', TRANSPORTER: 'Transporter (Driver)', DISTRIBUTOR: 'Distributor', MARKET_AGENT: 'Market Agent', MINAGRI_OFFICER: 'MINAGRI Officer', WAREHOUSE_MANAGER: 'Warehouse Manager' }
 const ROLE_BADGE = { ADMIN: 'badge-red', COOPERATIVE_MANAGER: 'badge-green', TRANSPORT_COMPANY: 'badge-amber', TRANSPORTER: 'badge-gray', DISTRIBUTOR: 'badge-primary', MARKET_AGENT: 'badge-blue', MINAGRI_OFFICER: 'badge-gray', WAREHOUSE_MANAGER: 'badge-blue' }
+const PAGE_SIZE = 50
 
 const createSchema = z.object({
   first_name: z.string().min(1, 'Required'),
@@ -211,27 +212,30 @@ export default function UserManagement() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('ALL')
   const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [showAddModal, setShowAddModal] = useState(false)
   const [viewUser, setViewUser] = useState(null)
   const [suspendTarget, setSuspendTarget] = useState(null)
   const [suspending, setSuspending] = useState(false)
 
-  const load = async () => {
+  const load = async (p = 1) => {
     setLoading(true)
     try {
-      const params = {}
+      const params = { page: p }
       if (roleFilter !== 'ALL') params.role = roleFilter
       if (search) params.search = search
       const res = await authApi.getUsers(params)
       setUsers(res.data.results || res.data || [])
       setTotal(res.data.count || res.data?.length || 0)
+      setPage(p)
     } catch { toast.error('Failed to load users') }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [roleFilter])
+  useEffect(() => { load(1) }, [roleFilter])
 
-  const handleSearch = (e) => { e.preventDefault(); load() }
+  const handleSearch = (e) => { e.preventDefault(); load(1) }
+  const pages = Math.ceil(total / PAGE_SIZE)
 
   const confirmToggleActive = async () => {
     if (!suspendTarget) return
@@ -240,7 +244,7 @@ export default function UserManagement() {
       await authApi.updateUser(suspendTarget.id, { is_active: !suspendTarget.is_active })
       toast.success(`User ${suspendTarget.is_active ? 'suspended' : 'activated'}`)
       setSuspendTarget(null)
-      load()
+      load(page)
     } catch { toast.error('Action failed') }
     finally { setSuspending(false) }
   }
@@ -365,6 +369,15 @@ export default function UserManagement() {
             </tbody>
           </table>
         </div>
+        {pages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+            <p className="text-xs text-gray-500">Showing {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()}</p>
+            <div className="flex gap-2">
+              <button onClick={() => load(page - 1)} disabled={page <= 1} className="px-3 py-1 rounded text-xs border border-gray-200 disabled:opacity-40 hover:bg-gray-100">Previous</button>
+              <button onClick={() => load(page + 1)} disabled={page >= pages} className="px-3 py-1 rounded text-xs border border-gray-200 disabled:opacity-40 hover:bg-gray-100">Next</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -8,13 +8,6 @@ import { distributionApi } from '../../api/distribution.js'
 import { traceabilityApi } from '../../api/traceability.js'
 import toast from 'react-hot-toast'
 
-const MOCK_DELIVERIES = [
-  { id: 'BCH-2026-001', batch_id: 'BCH-2026-001', cooperative_name: 'Musanze Coffee Coop', crop_name: 'Coffee', shipped_qty_kg: 12500, eta: '2026-06-13', status: 'IN_TRANSIT' },
-  { id: 'BCH-2026-002', batch_id: 'BCH-2026-002', cooperative_name: 'Huye Highlands Coop', crop_name: 'Avocados', shipped_qty_kg: 8000, eta: '2026-06-14', status: 'IN_TRANSIT' },
-  { id: 'BCH-2026-003', batch_id: 'BCH-2026-003', cooperative_name: 'Nyanza Potato Growers', crop_name: 'Potatoes', shipped_qty_kg: 5000, eta: '2026-06-10', status: 'DELIVERED' },
-  { id: 'BCH-2026-004', batch_id: 'BCH-2026-004', cooperative_name: 'Musanze Coffee Coop', crop_name: 'Maize', shipped_qty_kg: 3200, eta: '2026-05-28', status: 'CONFIRMED' },
-]
-
 const GRADE_OPTIONS = ['A', 'B', 'C']
 const FILTER_OPTIONS = ['ALL', 'IN_TRANSIT', 'CONFIRMED']
 const FILTER_LABEL = { ALL: 'All', IN_TRANSIT: 'In Transit', CONFIRMED: 'Confirmed' }
@@ -41,7 +34,7 @@ function mapBatch(b) {
 }
 
 export default function IncomingDeliveries() {
-  const [deliveries, setDeliveries] = useState(MOCK_DELIVERIES)
+  const [deliveries, setDeliveries] = useState([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('ALL')
   const [confirmTarget, setConfirmTarget] = useState(null)
@@ -61,12 +54,14 @@ export default function IncomingDeliveries() {
     try {
       const res = await traceabilityApi.getBatches()
       const list = res.data?.results ?? res.data ?? []
-      const relevant = list
-        .filter(b => ['IN_TRANSIT_LEG1', 'AT_DISTRIBUTOR'].includes(b.current_status))
-        .map(mapBatch)
-      if (relevant.length) setDeliveries(relevant)
-    } catch {}
-    finally { setLoading(false) }
+      setDeliveries(
+        list
+          .filter(b => ['IN_TRANSIT_LEG1', 'AT_DISTRIBUTOR'].includes(b.current_status))
+          .map(mapBatch)
+      )
+    } catch {
+      toast.error('Could not load incoming deliveries')
+    } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])

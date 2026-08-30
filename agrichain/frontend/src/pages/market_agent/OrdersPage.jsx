@@ -4,14 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { marketAgentApi } from '../../api/marketAgent.js'
 import toast from 'react-hot-toast'
 
-const MOCK_ORDERS = [
-  { id: 1, crop_name: 'Tomatoes',  distributor_name: 'Kigali Fresh Distributors',   quantity_requested_kg: 200, confirmed_quantity_kg: null, preferred_collection_date: '2026-06-20', status: 'PENDING_CONFIRMATION', delivery_method: null },
-  { id: 2, crop_name: 'Avocados',  distributor_name: 'Musanze Agro Wholesale',       quantity_requested_kg: 150, confirmed_quantity_kg: 150,  preferred_collection_date: '2026-06-21', status: 'CONFIRMED',            delivery_method: 'SELF_COLLECTION' },
-  { id: 3, crop_name: 'Beans',     distributor_name: 'Kigali Fresh Distributors',   quantity_requested_kg: 250, confirmed_quantity_kg: 250,  preferred_collection_date: '2026-06-18', status: 'CONFIRMED',            delivery_method: 'TRANSPORTER_DELIVERY' },
-  { id: 4, crop_name: 'Maize',     distributor_name: 'Huye Market Supplies',        quantity_requested_kg: 300, confirmed_quantity_kg: null, preferred_collection_date: '2026-06-15', status: 'DECLINED',             delivery_method: null },
-  { id: 5, crop_name: 'Sweet Potatoes', distributor_name: 'Musanze Agro Wholesale', quantity_requested_kg: 180, confirmed_quantity_kg: 180,  preferred_collection_date: '2026-06-12', status: 'COLLECTED',            delivery_method: 'SELF_COLLECTION' },
-]
-
 function normStatus(s) {
   if (!s) return 'PENDING'
   if (s === 'PENDING_CONFIRMATION') return 'PENDING'
@@ -43,7 +35,7 @@ const PILL_INACTIVE = 'bg-gray-100 text-gray-600 hover:bg-gray-200'
 
 export default function OrdersPage() {
   const navigate = useNavigate()
-  const [orders, setOrders] = useState(MOCK_ORDERS)
+  const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('ALL')
 
@@ -51,10 +43,10 @@ export default function OrdersPage() {
     setLoading(true)
     try {
       const res = await marketAgentApi.getMyOrders()
-      const list = res.data?.results ?? res.data ?? []
-      if (list.length) setOrders(list)
-    } catch {}
-    finally { setLoading(false) }
+      setOrders(res.data?.results ?? res.data ?? [])
+    } catch {
+      toast.error('Could not load orders')
+    } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { load() }, [load])

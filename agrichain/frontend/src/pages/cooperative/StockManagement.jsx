@@ -5,14 +5,6 @@ import Modal from '../../components/ui/Modal.jsx'
 import { cooperativesApi } from '../../api/cooperatives.js'
 import toast from 'react-hot-toast'
 
-const MOCK_STOCK = [
-  { id: 1, crop_name: 'Tomatoes', crop: 1, notes: 'Roma variety',    quantity_kg: 1200, quality_grade: 'A', harvest_date: '2026-06-01', available_from: '2026-06-03', is_available: true  },
-  { id: 2, crop_name: 'Avocados', crop: 2, notes: 'Hass variety',    quantity_kg: 850,  quality_grade: 'A', harvest_date: '2026-05-28', available_from: '2026-05-30', is_available: true  },
-  { id: 3, crop_name: 'Maize',    crop: 3, notes: 'Yellow maize',    quantity_kg: 3400, quality_grade: 'B', harvest_date: '2026-05-20', available_from: '2026-05-25', is_available: false },
-  { id: 4, crop_name: 'Beans',    crop: 4, notes: 'Kidney beans',    quantity_kg: 600,  quality_grade: 'A', harvest_date: '2026-06-05', available_from: '2026-06-07', is_available: true  },
-  { id: 5, crop_name: 'Potatoes', crop: 5, notes: 'Irish potatoes',  quantity_kg: 2100, quality_grade: 'B', harvest_date: '2026-06-01', available_from: '2026-06-05', is_available: true, low_stock: true },
-]
-
 const BLANK_FORM = { crop: '', customCropName: '', quantity_kg: '', quality_grade: 'A', harvest_date: '', available_from: '', notes: '' }
 
 const OTHER_CROP = '__other__'
@@ -89,7 +81,7 @@ const StockForm = ({ values, onChange, crops, isEdit = false }) => (
 )
 
 export default function StockManagement() {
-  const [stock, setStock] = useState(MOCK_STOCK)
+  const [stock, setStock] = useState([])
   const [crops, setCrops] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -110,10 +102,9 @@ export default function StockManagement() {
       cooperativesApi.getMyStock(),
       cooperativesApi.getCrops(),
     ]).then(([stockRes, cropsRes]) => {
-      const s = stockRes.data?.results ?? stockRes.data ?? []
-      if (s.length) setStock(s)
+      setStock(stockRes.data?.results ?? stockRes.data ?? [])
       setCrops(cropsRes.data?.results ?? cropsRes.data ?? [])
-    }).catch(() => {})
+    }).catch(() => toast.error('Could not load stock records'))
   }, [])
 
   const filtered = stock.filter(s =>

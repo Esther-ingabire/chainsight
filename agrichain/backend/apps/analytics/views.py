@@ -23,6 +23,34 @@ except ImportError:
     LinearRegression = None
 
 
+def _last_n_months(now, n=6):
+    """
+    The last `n` calendar months (oldest first), each as (start, end, label) — start/end
+    are tz-aware datetime bounds for a `__gte`/`__lt` filter, label is e.g. 'Aug 2026'.
+
+    Stepping back by a fixed `timedelta(days=30)` and snapping to day=1 (the pattern this
+    replaced, previously duplicated across four call sites in this file) drifts against
+    real month lengths — near the end of a 31-day month it can land twice in the same
+    calendar month and skip another entirely, producing a trend chart with a duplicate
+    label and a missing one. This walks back by calendar months instead, so it's exact
+    regardless of which day of the month `now` falls on.
+    """
+    months = []
+    year, month = now.year, now.month
+    for _ in range(n):
+        m_start = now.replace(year=year, month=month, day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month = month + 1 if month < 12 else 1
+        next_year = year if month < 12 else year + 1
+        m_end = now.replace(year=next_year, month=next_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+        months.append((m_start, m_end, m_start.strftime('%b %Y')))
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    months.reverse()
+    return months
+
+
 class NationalKPIViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NationalDailyKPISerializer
     permission_classes = [IsAnalyticsRole]
@@ -217,10 +245,7 @@ class MinagriExecutiveDashboardView(_MinagriBase):
 
         now = timezone.now()
         monthly_trend = []
-        for i in range(5, -1, -1):
-            anchor = now - timedelta(days=i * 30)
-            m_start = anchor.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            m_end = (m_start + timedelta(days=32)).replace(day=1)
+        for m_start, m_end, _label in _last_n_months(now):
             avg = Batch.objects.filter(
                 dispatch_timestamp__gte=m_start,
                 dispatch_timestamp__lt=m_end,
@@ -402,7 +427,6 @@ class MinagriLossTrendView(_MinagriBase):
         from django.db.models import Avg
         from django.db.models.functions import TruncMonth
         from django.utils import timezone
-        from datetime import timedelta
 
         district = request.query_params.get('district', '').strip()
         crop     = request.query_params.get('crop', '').strip()
@@ -417,15 +441,13 @@ class MinagriLossTrendView(_MinagriBase):
         loss_field = STAGE_FIELD.get(stage.lower(), 'total_loss_pct')
 
         now = timezone.now()
-        month_starts = []
-        for i in range(5, -1, -1):
-            anchor = now - timedelta(days=i * 30)
-            month_starts.append(anchor.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+        months_range = _last_n_months(now)
+        month_starts = [m_start for m_start, _m_end, _label in months_range]
 
         # Single grouped query across the whole 6-month window instead of one
         # query per month (was the main cost behind this page's slow "sync").
-        range_start = month_starts[0]
-        range_end = (month_starts[-1] + timedelta(days=32)).replace(day=1)
+        range_start = months_range[0][0]
+        range_end = months_range[-1][1]
         qs = Batch.objects.filter(
             dispatch_timestamp__gte=range_start,
             dispatch_timestamp__lt=range_end,
@@ -561,11 +583,7 @@ class MinagriBottleneckView(_MinagriBase):
                 })
 
         months, delays_trend, coldchain_breach_trend, market_no_demand_trend = [], [], [], []
-        for i in range(4, -1, -1):
-            anchor = now - timedelta(days=i * 30)
-            m_start = anchor.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            m_end = (m_start + timedelta(days=32)).replace(day=1)
-
+        for m_start, m_end, _label in _last_n_months(now, n=5):
             trips_m = list(Trip.objects.filter(
                 actual_pickup_datetime__gte=m_start,
                 actual_pickup_datetime__lt=m_end,
@@ -595,7 +613,7 @@ class MinagriBottleneckView(_MinagriBase):
             denom_m = moved_m + discarded_m
             no_demand_pct_m = round(no_demand_m / denom_m * 100, 1) if denom_m > 0 else 0.0
 
-            months.append(anchor.strftime('%b'))
+            months.append(m_start.strftime('%b'))
             delays_trend.append(delay)
             coldchain_breach_trend.append(breach_count_m)
             market_no_demand_trend.append(no_demand_pct_m)
@@ -1107,18 +1125,14 @@ class MinagriChatView(_MinagriBase):
         from apps.traceability.models import Batch
         from django.db.models import Avg
         from django.utils import timezone
-        from datetime import timedelta
         now = timezone.now()
         months = []
-        for i in range(5, -1, -1):
-            anchor = now - timedelta(days=i * 30)
-            m_start = anchor.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            m_end = (m_start + timedelta(days=32)).replace(day=1)
+        for m_start, m_end, label in _last_n_months(now):
             avg = Batch.objects.filter(
                 dispatch_timestamp__gte=m_start, dispatch_timestamp__lt=m_end,
                 total_loss_pct__isnull=False,
             ).aggregate(avg=Avg('total_loss_pct'))['avg']
-            months.append((anchor.strftime('%b %Y'), round(float(avg or 0), 1)))
+            months.append((label, round(float(avg or 0), 1)))
         lines = ["**National Loss Trend (Last 6 Months)**\n"]
         for label, val in months:
             bar = '█' * min(20, int(val * 2)) if val > 0 else '▪'

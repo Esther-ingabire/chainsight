@@ -102,7 +102,7 @@ export default function ClaimsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Quantity Collected (tons)</label>
+              <label className="label">Quantity Collected (kg)</label>
               <input
                 type="number" min="0" step="0.01" className="input"
                 placeholder="0"
@@ -112,7 +112,7 @@ export default function ClaimsPage() {
               />
             </div>
             <div>
-              <label className="label">Quantity Arrived (tons)</label>
+              <label className="label">Quantity Arrived (kg)</label>
               <input
                 type="number" min="0" step="0.01" className="input"
                 placeholder="0"

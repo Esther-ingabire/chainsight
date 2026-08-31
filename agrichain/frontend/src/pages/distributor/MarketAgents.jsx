@@ -201,7 +201,7 @@ export default function MarketAgents() {
   const confirmAccept = async () => {
     if (!acceptTarget) return
     setAccepting(true)
-    const method = acceptTarget.delivery_method || 'SELF_COLLECTION'
+    const method = acceptTarget.preferred_delivery_method || 'SELF_COLLECTION'
     try {
       await distributionApi.confirmOrder(acceptTarget.id, { delivery_method: method })
     } catch (err) {
@@ -694,12 +694,15 @@ export default function MarketAgents() {
                   Est. value: RWF {(Number(acceptTarget.price_per_kg) * Number(acceptTarget.quantity_requested_kg)).toLocaleString()}
                 </p>
               )}
+              {acceptTarget.notes && (
+                <p className="text-gray-500 italic">"{acceptTarget.notes}"</p>
+              )}
             </div>
             <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium
-              ${acceptTarget.delivery_method === 'TRANSPORTER_DELIVERY'
+              ${acceptTarget.preferred_delivery_method === 'TRANSPORTER_DELIVERY'
                 ? 'bg-primary-50 border-primary-200 text-primary-700'
                 : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-              {acceptTarget.delivery_method === 'TRANSPORTER_DELIVERY'
+              {acceptTarget.preferred_delivery_method === 'TRANSPORTER_DELIVERY'
                 ? <><Truck className="w-4 h-4 flex-shrink-0" /> Agent requested delivery — you will arrange transport</>
                 : <><Package className="w-4 h-4 flex-shrink-0" /> Agent will self-collect from your warehouse</>}
             </div>

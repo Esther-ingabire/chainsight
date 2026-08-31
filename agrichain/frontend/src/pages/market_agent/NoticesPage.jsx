@@ -68,7 +68,7 @@ export default function NoticesPage() {
         collection_notice: orderTarget.id,
         quantity_requested_kg: qty,
         preferred_collection_date: orderForm.preferred_collection_date || null,
-        delivery_method: orderForm.delivery_method,
+        preferred_delivery_method: orderForm.delivery_method,
         notes: orderForm.notes,
       })
       toast.success(`Order placed for ${qty} kg of ${orderTarget.crop_name} — waiting for distributor to confirm.`)

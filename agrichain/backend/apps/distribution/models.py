@@ -176,8 +176,13 @@ class Order(models.Model):
     preferred_collection_date = models.DateField(null=True, blank=True)
     confirmed_quantity_kg  = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     adjustment_reason      = models.TextField(blank=True)
+    notes                  = models.TextField(blank=True, help_text="Set by the market agent when placing the order — e.g. handling instructions.")
 
-    # Delivery method — set by distributor when confirming
+    # Delivery method — set by distributor when confirming. preferred_delivery_method is
+    # only what the agent asked for at order time (a hint the distributor sees, not binding);
+    # keeping it separate from delivery_method preserves the OrderSerializer rule that
+    # delivery_method itself is only ever settable via the confirm action.
+    preferred_delivery_method = models.CharField(max_length=30, choices=DeliveryMethod.choices, null=True, blank=True)
     delivery_method    = models.CharField(max_length=30, choices=DeliveryMethod.choices, null=True, blank=True)
     transporter        = models.ForeignKey('transport.Transporter', on_delete=models.SET_NULL,
                                            null=True, blank=True, related_name='leg2_orders',

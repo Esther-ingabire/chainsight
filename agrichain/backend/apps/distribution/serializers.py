@@ -189,8 +189,8 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = ['id', 'collection_notice', 'market_agent', 'market_agent_name',
                   'distributor', 'distributor_name', 'crop_name', 'price_per_kg',
-                  'quantity_requested_kg', 'preferred_collection_date',
-                  'confirmed_quantity_kg', 'adjustment_reason',
+                  'quantity_requested_kg', 'preferred_collection_date', 'notes',
+                  'confirmed_quantity_kg', 'adjustment_reason', 'preferred_delivery_method',
                   'delivery_method', 'transporter', 'status', 'source_batches',
                   'created_at', 'confirmed_at', 'updated_at']
         # market_agent/distributor are set from the requester's profile in perform_create;

@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { getNotices, recordCollection, getCollections } from '../../api/marketAgent';
+import { getMyOrders, recordCollection, getCollections } from '../../api/marketAgent';
 import { C, S } from '../../theme';
 
 function formatDate(d) {
@@ -36,14 +36,14 @@ function getLossColor(pct) {
 }
 
 function CollectionHistoryCard({ item }) {
-  const loss = item.loss_percentage != null ? parseFloat(item.loss_percentage) : null;
+  const loss = item.self_transport_loss_pct != null ? parseFloat(item.self_transport_loss_pct) : null;
   const lossColor = getLossColor(loss);
 
   return (
     <View style={styles.historyCard}>
       <View style={S.spaceBetween}>
         <Text style={styles.historyProduce}>
-          {item.produce_type || item.notice_name || 'Collection'}
+          {item.crop_name || 'Collection'}
         </Text>
         {loss !== null && (
           <View style={[S.badge, { backgroundColor: lossColor + '1A' }]}>
@@ -51,7 +51,7 @@ function CollectionHistoryCard({ item }) {
           </View>
         )}
       </View>
-      <Text style={styles.historyDate}>{formatDate(item.collection_date)}</Text>
+      <Text style={styles.historyDate}>{formatDate(item.collected_at)}</Text>
       <View style={styles.historyDetails}>
         <View style={styles.historyDetail}>
           <Text style={styles.historyDetailLabel}>Collected</Text>
@@ -59,38 +59,24 @@ function CollectionHistoryCard({ item }) {
         </View>
         <View style={styles.historyDetail}>
           <Text style={styles.historyDetailLabel}>Arrived</Text>
-          <Text style={styles.historyDetailValue}>{item.quantity_arrived_kg ?? '—'} kg</Text>
+          <Text style={styles.historyDetailValue}>{item.quantity_arrived_at_stall_kg ?? '—'} kg</Text>
         </View>
-        {item.transport_method && (
-          <View style={styles.historyDetail}>
-            <Text style={styles.historyDetailLabel}>Transport</Text>
-            <Text style={styles.historyDetailValue}>{item.transport_method}</Text>
-          </View>
-        )}
       </View>
     </View>
   );
 }
 
-const TRANSPORT_METHODS = [
-  { key: 'truck', label: 'Truck' },
-  { key: 'motorcycle', label: 'Motorcycle' },
-  { key: 'bicycle', label: 'Bicycle' },
-  { key: 'on_foot', label: 'On Foot' },
-  { key: 'other', label: 'Other' },
-];
-
 export default function CollectionScreen() {
-  const [notices, setNotices] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [collections, setCollections] = useState([]);
 
-  // Form state
-  const [selectedNotice, setSelectedNotice] = useState(null);
+  // Form state — an order must be selected: the backend records a collection against a
+  // specific Order (created once a distributor confirms the agent's request), not a
+  // CollectionNotice directly.
+  const [selectedOrder, setSelectedOrder] = useState(null);
   const [showNoticePicker, setShowNoticePicker] = useState(false);
   const [quantityCollected, setQuantityCollected] = useState('');
   const [quantityArrived, setQuantityArrived] = useState('');
-  const [transportMethod, setTransportMethod] = useState('truck');
-  const [showTransportPicker, setShowTransportPicker] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -111,16 +97,19 @@ export default function CollectionScreen() {
   const fetchData = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const [noticesRes, collectionsRes] = await Promise.allSettled([
-        getNotices({ status: 'active', page_size: 50 }),
-        getCollections({ page_size: 20, ordering: '-collection_date' }),
+      const [ordersRes, collectionsRes] = await Promise.allSettled([
+        getMyOrders(),
+        getCollections(),
       ]);
 
-      if (noticesRes.status === 'fulfilled') {
-        setNotices(noticesRes.value.data?.results || []);
+      if (ordersRes.status === 'fulfilled') {
+        // OrderViewSet has no query-param filtering, so filter to confirmed-but-not-yet-
+        // collected orders client-side.
+        const all = ordersRes.value.data?.results || ordersRes.value.data || [];
+        setOrders(all.filter((o) => o.status === 'CONFIRMED'));
       }
       if (collectionsRes.status === 'fulfilled') {
-        setCollections(collectionsRes.value.data?.results || []);
+        setCollections(collectionsRes.value.data?.results || collectionsRes.value.data || []);
       }
     } catch {
       // silent
@@ -137,13 +126,16 @@ export default function CollectionScreen() {
   );
 
   const resetForm = () => {
-    setSelectedNotice(null);
+    setSelectedOrder(null);
     setQuantityCollected('');
     setQuantityArrived('');
-    setTransportMethod('truck');
   };
 
   const handleSubmit = async () => {
+    if (!selectedOrder) {
+      Alert.alert('Missing Order', 'Select which confirmed order you collected.');
+      return;
+    }
     if (!quantityCollected || !quantityArrived) {
       Alert.alert('Missing Fields', 'Please enter both collected and arrived quantities.');
       return;
@@ -162,10 +154,10 @@ export default function CollectionScreen() {
     setSubmitting(true);
     try {
       await recordCollection({
-        notice_id: selectedNotice?.id || null,
+        order: selectedOrder.id,
         quantity_collected_kg: col,
-        quantity_arrived_kg: arr,
-        transport_method: transportMethod,
+        quantity_arrived_at_stall_kg: arr,
+        collected_at: new Date().toISOString(),
       });
       Alert.alert('Success', 'Collection recorded successfully!');
       resetForm();
@@ -224,18 +216,20 @@ export default function CollectionScreen() {
           <View style={S.card}>
             <Text style={styles.formTitle}>Record New Collection</Text>
 
-            {/* Notice picker */}
+            {/* Order picker — collections are recorded against a confirmed order */}
             <View style={styles.fieldGroup}>
-              <Text style={S.label}>Notice (optional)</Text>
+              <Text style={S.label}>Confirmed Order</Text>
               <TouchableOpacity
                 style={styles.picker}
                 onPress={() => setShowNoticePicker((v) => !v)}
               >
                 <Ionicons name="document-text-outline" size={16} color={C.gray500} />
-                <Text style={[styles.pickerText, !selectedNotice && { color: C.gray400 }]}>
-                  {selectedNotice
-                    ? `${selectedNotice.produce_type || selectedNotice.title} — ${selectedNotice.distributor_name || ''}`
-                    : 'Select a notice (optional)'}
+                <Text style={[styles.pickerText, !selectedOrder && { color: C.gray400 }]}>
+                  {selectedOrder
+                    ? `${selectedOrder.crop_name} — ${selectedOrder.distributor_name || ''}`
+                    : orders.length === 0
+                    ? 'No confirmed orders awaiting collection'
+                    : 'Select the order you collected'}
                 </Text>
                 <Ionicons
                   name={showNoticePicker ? 'chevron-up' : 'chevron-down'}
@@ -243,38 +237,27 @@ export default function CollectionScreen() {
                   color={C.gray400}
                 />
               </TouchableOpacity>
-              {showNoticePicker && (
+              {showNoticePicker && orders.length > 0 && (
                 <View style={styles.pickerDropdown}>
-                  <TouchableOpacity
-                    style={styles.pickerOption}
-                    onPress={() => {
-                      setSelectedNotice(null);
-                      setShowNoticePicker(false);
-                    }}
-                  >
-                    <Text style={[styles.pickerOptionText, { color: C.gray500 }]}>
-                      None
-                    </Text>
-                  </TouchableOpacity>
-                  {notices.map((n) => (
+                  {orders.map((o) => (
                     <TouchableOpacity
-                      key={n.id}
+                      key={o.id}
                       style={[
                         styles.pickerOption,
-                        selectedNotice?.id === n.id && styles.pickerOptionSelected,
+                        selectedOrder?.id === o.id && styles.pickerOptionSelected,
                       ]}
                       onPress={() => {
-                        setSelectedNotice(n);
+                        setSelectedOrder(o);
                         setShowNoticePicker(false);
                       }}
                     >
                       <Text
                         style={[
                           styles.pickerOptionText,
-                          selectedNotice?.id === n.id && { color: C.primary, fontWeight: '600' },
+                          selectedOrder?.id === o.id && { color: C.primary, fontWeight: '600' },
                         ]}
                       >
-                        {n.produce_type || n.title} — {n.distributor_name || ''}
+                        {o.crop_name} — {o.distributor_name || ''} ({Number(o.confirmed_quantity_kg ?? o.quantity_requested_kg).toLocaleString()} kg)
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -357,51 +340,6 @@ export default function CollectionScreen() {
                 </View>
               </View>
             )}
-
-            {/* Transport method */}
-            <View style={styles.fieldGroup}>
-              <Text style={S.label}>Transport Method</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={() => setShowTransportPicker((v) => !v)}
-              >
-                <Ionicons name="car-outline" size={16} color={C.gray500} />
-                <Text style={styles.pickerText}>
-                  {TRANSPORT_METHODS.find((m) => m.key === transportMethod)?.label || 'Select'}
-                </Text>
-                <Ionicons
-                  name={showTransportPicker ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={C.gray400}
-                />
-              </TouchableOpacity>
-              {showTransportPicker && (
-                <View style={styles.pickerDropdown}>
-                  {TRANSPORT_METHODS.map((m) => (
-                    <TouchableOpacity
-                      key={m.key}
-                      style={[
-                        styles.pickerOption,
-                        transportMethod === m.key && styles.pickerOptionSelected,
-                      ]}
-                      onPress={() => {
-                        setTransportMethod(m.key);
-                        setShowTransportPicker(false);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.pickerOptionText,
-                          transportMethod === m.key && { color: C.primary, fontWeight: '600' },
-                        ]}
-                      >
-                        {m.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
 
             <TouchableOpacity
               style={[S.button, submitting && { opacity: 0.6 }]}

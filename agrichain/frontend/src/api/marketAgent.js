@@ -13,6 +13,8 @@ export const marketAgentApi = {
   // Market price recording — this agent's own submissions
   getMyPriceRecords:  ()     => apiClient.get('/market-agents/price-records/'),
   recordPrice:        (data) => apiClient.post('/market-agents/price-records/', data),
+  updatePriceRecord:  (id, data) => apiClient.patch(`/market-agents/price-records/${id}/`, data),
+  deletePriceRecord:  (id)   => apiClient.delete(`/market-agents/price-records/${id}/`),
   // National price board — every role can browse, only market agents can post
   getNationalPrices:  (params) => apiClient.get('/market-agents/price-records/national/', { params }),
   // Orders — agent places orders against distributor stock listings

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Loader2, Pencil, Trash2, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { marketAgentApi } from '../../api/marketAgent.js'
 
@@ -13,6 +13,8 @@ export default function PriceRecording() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -24,26 +26,67 @@ export default function PriceRecording() {
 
   useEffect(() => { load() }, [load])
 
+  const startEdit = (r) => {
+    setEditingId(r.id)
+    setForm({
+      crop_name: r.crop_name, price_per_kg: String(r.price_per_kg),
+      market_name: r.market_name, quality_grade: r.quality_grade, notes: r.notes || '',
+    })
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setForm(BLANK_FORM)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      const res = await marketAgentApi.recordPrice({
-        crop_name: form.crop_name,
-        price_per_kg: Number(form.price_per_kg),
-        market_name: form.market_name,
-        quality_grade: form.quality_grade,
-        notes: form.notes,
-      })
-      setRecords(r => [res.data, ...r])
-      toast.success('Price recorded')
-      setForm(f => ({ ...BLANK_FORM, market_name: f.market_name }))
+      if (editingId) {
+        const res = await marketAgentApi.updatePriceRecord(editingId, {
+          crop_name: form.crop_name,
+          price_per_kg: Number(form.price_per_kg),
+          market_name: form.market_name,
+          quality_grade: form.quality_grade,
+          notes: form.notes,
+        })
+        setRecords(rs => rs.map(r => r.id === editingId ? res.data : r))
+        toast.success('Price record updated')
+        setEditingId(null)
+        setForm(BLANK_FORM)
+      } else {
+        const res = await marketAgentApi.recordPrice({
+          crop_name: form.crop_name,
+          price_per_kg: Number(form.price_per_kg),
+          market_name: form.market_name,
+          quality_grade: form.quality_grade,
+          notes: form.notes,
+        })
+        setRecords(r => [res.data, ...r])
+        toast.success('Price recorded')
+        setForm(f => ({ ...BLANK_FORM, market_name: f.market_name }))
+      }
     } catch (err) {
       const raw = err.response?.data
-      const msg = raw ? Object.values(raw).flat().join(' ') : 'Could not record price'
+      const msg = raw ? Object.values(raw).flat().join(' ') : 'Could not save price record'
       toast.error(msg)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    setDeletingId(id)
+    try {
+      await marketAgentApi.deletePriceRecord(id)
+      setRecords(rs => rs.filter(r => r.id !== id))
+      toast.success('Price record deleted')
+      if (editingId === id) cancelEdit()
+    } catch {
+      toast.error('Could not delete price record')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -59,7 +102,7 @@ export default function PriceRecording() {
 
       {/* Form */}
       <div className="card">
-        <h2 className="text-base font-semibold text-gray-700 mb-4">New price entry</h2>
+        <h2 className="text-base font-semibold text-gray-700 mb-4">{editingId ? 'Edit price entry' : 'New price entry'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -94,9 +137,17 @@ export default function PriceRecording() {
             <label className="label">Notes (optional)</label>
             <input className="input" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. Prices rising due to low supply" />
           </div>
-          <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-60">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} {saving ? 'Recording…' : 'Record Price'}
-          </button>
+          <div className="flex gap-3">
+            <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-60">
+              {saving
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : editingId ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Record Price'}
+            </button>
+            {editingId && (
+              <button type="button" onClick={cancelEdit} className="btn-secondary">Cancel</button>
+            )}
+          </div>
         </form>
       </div>
 
@@ -121,14 +172,29 @@ export default function PriceRecording() {
                       {r.market_name} · {new Date(r.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · Grade {r.quality_grade}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-gray-900">RWF {price.toLocaleString()}/kg</p>
-                    {change !== null && (
-                      <div className={`flex items-center justify-end gap-0.5 text-xs font-medium ${change > 0 ? 'text-success-500' : change < 0 ? 'text-danger-500' : 'text-gray-400'}`}>
-                        {change > 0 ? <TrendingUp className="w-3 h-3" /> : change < 0 ? <TrendingDown className="w-3 h-3" /> : null}
-                        {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)}%` : 'No change'}
-                      </div>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="font-bold text-gray-900">RWF {price.toLocaleString()}/kg</p>
+                      {change !== null && (
+                        <div className={`flex items-center justify-end gap-0.5 text-xs font-medium ${change > 0 ? 'text-success-500' : change < 0 ? 'text-danger-500' : 'text-gray-400'}`}>
+                          {change > 0 ? <TrendingUp className="w-3 h-3" /> : change < 0 ? <TrendingDown className="w-3 h-3" /> : null}
+                          {change !== 0 ? `${change > 0 ? '+' : ''}${change.toFixed(1)}%` : 'No change'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(r)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-primary-600" title="Edit">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(r.id)}
+                        disabled={deletingId === r.id}
+                        className="p-1.5 rounded hover:bg-danger-50 text-gray-400 hover:text-danger-500 disabled:opacity-50"
+                        title="Delete"
+                      >
+                        {deletingId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )

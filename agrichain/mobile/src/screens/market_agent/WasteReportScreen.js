@@ -29,20 +29,20 @@ function formatDate(d) {
 }
 
 const WASTE_REASONS = [
-  { key: 'spoilage', label: 'Spoilage', icon: 'leaf-outline', color: '#16a34a' },
-  { key: 'overstock', label: 'Overstock', icon: 'archive-outline', color: '#d97706' },
-  { key: 'damage', label: 'Damage', icon: 'hammer-outline', color: '#dc2626' },
-  { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline', color: C.gray500 },
+  { key: 'SPOILAGE', label: 'Spoilage', icon: 'leaf-outline', color: '#16a34a' },
+  { key: 'NO_DEMAND', label: 'No Demand', icon: 'archive-outline', color: '#d97706' },
+  { key: 'DAMAGE', label: 'Damage', icon: 'hammer-outline', color: '#dc2626' },
+  { key: 'OTHER', label: 'Other', icon: 'ellipsis-horizontal-circle-outline', color: C.gray500 },
 ];
 
 function WasteReportCard({ item }) {
-  const reason = WASTE_REASONS.find((r) => r.key === item.reason) || WASTE_REASONS[3];
+  const reason = WASTE_REASONS.find((r) => r.key === item.discard_reason) || WASTE_REASONS[3];
 
   return (
     <View style={styles.historyCard}>
       <View style={S.spaceBetween}>
-        <Text style={styles.historyTitle}>{item.produce_type || 'Waste'}</Text>
-        <Text style={styles.historyDate}>{formatDate(item.report_date || item.date)}</Text>
+        <Text style={styles.historyTitle}>{item.crop_name || 'Waste'}</Text>
+        <Text style={styles.historyDate}>{formatDate(item.reporting_period_end)}</Text>
       </View>
 
       <View style={styles.historyRow}>
@@ -53,13 +53,13 @@ function WasteReportCard({ item }) {
         <View style={styles.quantityBadge}>
           <Ionicons name="scale-outline" size={13} color={C.gray500} />
           <Text style={styles.quantityText}>
-            {item.quantity_wasted_kg != null ? `${item.quantity_wasted_kg} kg` : '—'}
+            {item.quantity_discarded_kg != null ? `${item.quantity_discarded_kg} kg` : '—'}
           </Text>
         </View>
       </View>
 
-      {item.notes ? (
-        <Text style={styles.notesText} numberOfLines={2}>{item.notes}</Text>
+      {item.discard_notes ? (
+        <Text style={styles.notesText} numberOfLines={2}>{item.discard_notes}</Text>
       ) : null}
     </View>
   );
@@ -68,11 +68,12 @@ function WasteReportCard({ item }) {
 export default function WasteReportScreen() {
   const [reports, setReports] = useState([]);
 
-  // Form state
+  // Form state — a single day's report, so reporting_period_start/end are both `date`.
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [produceType, setProduceType] = useState('');
+  const [quantitySold, setQuantitySold] = useState('');
   const [quantityWasted, setQuantityWasted] = useState('');
-  const [reason, setReason] = useState('spoilage');
+  const [reason, setReason] = useState('SPOILAGE');
   const [notes, setNotes] = useState('');
   const [showReasonPicker, setShowReasonPicker] = useState(false);
 
@@ -83,8 +84,8 @@ export default function WasteReportScreen() {
   const fetchReports = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      const { data } = await getWasteReports({ page_size: 20, ordering: '-report_date' });
-      setReports(data?.results || []);
+      const { data } = await getWasteReports();
+      setReports(data?.results || data || []);
     } catch (err) {
       if (err?.response?.status !== 404) {
         Alert.alert('Error', 'Could not load waste reports.');
@@ -106,8 +107,9 @@ export default function WasteReportScreen() {
   const resetForm = () => {
     setDate(new Date().toISOString().split('T')[0]);
     setProduceType('');
+    setQuantitySold('');
     setQuantityWasted('');
-    setReason('spoilage');
+    setReason('SPOILAGE');
     setNotes('');
   };
 
@@ -116,13 +118,14 @@ export default function WasteReportScreen() {
       Alert.alert('Missing Field', 'Please enter the produce type.');
       return;
     }
-    if (!quantityWasted) {
-      Alert.alert('Missing Field', 'Please enter the quantity wasted.');
+    if (!quantitySold || !quantityWasted) {
+      Alert.alert('Missing Field', 'Please enter both quantity sold and quantity wasted.');
       return;
     }
-    const qty = parseFloat(quantityWasted);
-    if (isNaN(qty) || qty <= 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid quantity.');
+    const sold = parseFloat(quantitySold);
+    const wasted = parseFloat(quantityWasted);
+    if (isNaN(sold) || sold < 0 || isNaN(wasted) || wasted <= 0) {
+      Alert.alert('Invalid Input', 'Please enter valid quantities.');
       return;
     }
     if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -133,11 +136,13 @@ export default function WasteReportScreen() {
     setSubmitting(true);
     try {
       await submitWasteReport({
-        report_date: date,
-        produce_type: produceType.trim(),
-        quantity_wasted_kg: qty,
-        reason,
-        notes: notes.trim() || undefined,
+        reporting_period_start: date,
+        reporting_period_end: date,
+        crop_name: produceType.trim(),
+        quantity_sold_kg: sold,
+        quantity_discarded_kg: wasted,
+        discard_reason: reason,
+        discard_notes: notes.trim(),
       });
       Alert.alert('Success', 'Waste report submitted successfully!');
       resetForm();
@@ -226,6 +231,22 @@ export default function WasteReportScreen() {
                   value={produceType}
                   onChangeText={setProduceType}
                   autoCapitalize="words"
+                />
+              </View>
+            </View>
+
+            {/* Quantity sold */}
+            <View style={styles.fieldGroup}>
+              <Text style={S.label}>Quantity Sold (kg)</Text>
+              <View style={styles.inputWithIcon}>
+                <Ionicons name="cash-outline" size={16} color={C.gray500} style={styles.inputIcon} />
+                <TextInput
+                  style={[S.input, styles.inputFlex]}
+                  placeholder="e.g. 175"
+                  placeholderTextColor={C.gray400}
+                  value={quantitySold}
+                  onChangeText={setQuantitySold}
+                  keyboardType="decimal-pad"
                 />
               </View>
             </View>

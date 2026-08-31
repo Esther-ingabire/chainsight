@@ -18,9 +18,6 @@ export const transportApi = {
   confirmDelivery: (tripId, data) => apiClient.post(`/transport/trips/${tripId}/confirm-delivery/`, data,
     data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined),
 
-  // GPS tracking
-  postGPSUpdate: (tripId, data) => apiClient.post(`/transport/trips/${tripId}/gps/`, data),
-
   // Transporter profile & vehicles
   getMyProfile: (config) => apiClient.get('/transport/transporters/my/', config),
   updateMyProfile: (data) => apiClient.patch('/transport/transporters/my/', data),

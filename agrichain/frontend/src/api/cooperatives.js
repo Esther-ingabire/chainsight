@@ -33,7 +33,6 @@ export const cooperativesApi = {
 
   // Storage facilities
   getMyFacilities: () => apiClient.get('/cooperatives/facilities/'),
-  getFacilityIoTReadings: (id, params) => apiClient.get(`/cooperatives/facilities/${id}/iot/`, { params }),
 
   // IoT readings for storage facilities
   getStorageReadings: (params) => apiClient.get('/iot/storage/', { params }),

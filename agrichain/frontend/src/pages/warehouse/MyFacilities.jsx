@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Warehouse, Thermometer, MapPin, Pencil, ToggleLeft, ToggleRight, List, Map as MapIcon } from 'lucide-react'
+import { Plus, Warehouse, Thermometer, MapPin, Pencil, ToggleLeft, ToggleRight, List, Map as MapIcon, Trash2, RotateCcw } from 'lucide-react'
 import Modal from '../../components/ui/Modal.jsx'
 import MapboxMap from '../../components/map/MapboxMap.jsx'
 import PlaceSearchInput from '../../components/map/PlaceSearchInput.jsx'
@@ -80,6 +80,18 @@ export default function MyFacilities() {
     }
   }
 
+  const toggleActive = async (f) => {
+    const activating = !f.is_active
+    if (!activating && !window.confirm(`Deactivate "${f.name}"? It will stop appearing as available and won't be rentable until reactivated.`)) return
+    try {
+      const res = await warehouseApi.updateFacility(f.id, { is_active: activating })
+      setFacilities(prev => prev.map(x => x.id === f.id ? res.data : x))
+      toast.success(activating ? 'Facility reactivated' : 'Facility deactivated')
+    } catch (err) {
+      toast.error(err.response?.data?.is_active?.[0] || 'Could not update facility status')
+    }
+  }
+
   const pinLat = form.gps_latitude ? parseFloat(form.gps_latitude) : null
   const pinLng = form.gps_longitude ? parseFloat(form.gps_longitude) : null
 
@@ -133,13 +145,16 @@ export default function MyFacilities() {
       ) : (
         <div className="space-y-3">
           {facilities.map(f => (
-            <div key={f.id} className="card flex items-center gap-5">
+            <div key={f.id} className={`card flex items-center gap-5 ${!f.is_active ? 'opacity-60' : ''}`}>
               <div className="w-12 h-12 rounded-xl bg-primary-50 flex items-center justify-center flex-shrink-0">
                 <Warehouse className="w-5 h-5 text-primary-600" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <p className="font-semibold text-gray-900">{f.name}</p>
+                  {!f.is_active && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactive</span>
+                  )}
                   {f.cooperative_name && (
                     <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-success-50 text-success-600">
                       Rented by {f.cooperative_name}
@@ -176,6 +191,15 @@ export default function MyFacilities() {
                 <button onClick={() => openEdit(f)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg">
                   <Pencil className="w-4 h-4" />
                 </button>
+                {!f.cooperative_name && (
+                  <button
+                    onClick={() => toggleActive(f)}
+                    className={`p-2 rounded-lg ${f.is_active ? 'text-gray-400 hover:text-danger-500 hover:bg-danger-50' : 'text-gray-400 hover:text-success-600 hover:bg-success-50'}`}
+                    title={f.is_active ? 'Deactivate facility' : 'Reactivate facility'}
+                  >
+                    {f.is_active ? <Trash2 className="w-4 h-4" /> : <RotateCcw className="w-4 h-4" />}
+                  </button>
+                )}
               </div>
             </div>
           ))}

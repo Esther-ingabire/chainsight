@@ -98,6 +98,17 @@ class ColdStorageFacilitySerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_is_active(self, value):
+        # Deactivation is this app's "delete" (a hard DELETE would cascade-destroy IoT
+        # reading history and orphan the rental relationship) — but not while a cooperative
+        # is actively renting the facility, or they'd lose visibility of space they're
+        # currently using with no warning.
+        if not value and self.instance is not None and self.instance.cooperative_id:
+            raise serializers.ValidationError(
+                'This facility is currently rented out — end the rental before deactivating it.'
+            )
+        return value
+
     def _rating_agg(self, obj):
         if not obj.warehouse_manager_id:
             return None
